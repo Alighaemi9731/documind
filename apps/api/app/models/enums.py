@@ -60,6 +60,35 @@ class KeySource(enum.StrEnum):
     byok = "byok"
 
 
+class DocumentStatus(enum.StrEnum):
+    """Ingestion lifecycle of a document (ARCHITECTURE.md section 6).
+
+    State machine: ``queued -> parsing -> chunking -> embedding -> ready``;
+    any non-terminal state may transition to ``failed`` with a
+    :class:`DocumentErrorCode`. Terminal states are ``ready`` and ``failed``.
+    """
+
+    queued = "queued"
+    parsing = "parsing"
+    chunking = "chunking"
+    embedding = "embedding"
+    ready = "ready"
+    failed = "failed"
+
+
+class DocumentErrorCode(enum.StrEnum):
+    """Typed terminal-failure reasons recorded on ``documents.error_code``."""
+
+    OVERSIZE = "OVERSIZE"
+    BAD_TYPE = "BAD_TYPE"
+    DECOMPRESSION_BOMB = "DECOMPRESSION_BOMB"
+    ENCRYPTED_PDF = "ENCRYPTED_PDF"
+    NO_TEXT = "NO_TEXT"
+    PARSE_ERROR = "PARSE_ERROR"
+    EMBED_ERROR = "EMBED_ERROR"
+    TOO_MANY_CHUNKS = "TOO_MANY_CHUNKS"
+
+
 __all__ = [
     "UserRole",
     "UserStatus",
@@ -67,4 +96,6 @@ __all__ = [
     "Provider",
     "Capability",
     "KeySource",
+    "DocumentStatus",
+    "DocumentErrorCode",
 ]

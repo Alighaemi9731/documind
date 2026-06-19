@@ -9,7 +9,7 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models.enums import UserRole, UserStatus
+from app.models.enums import DocumentErrorCode, DocumentStatus, UserRole, UserStatus
 
 # --------------------------------------------------------------------------- #
 # Auth
@@ -91,6 +91,51 @@ class ProjectPublic(BaseModel):
     embedding_normalized: bool | None
 
 
+# --------------------------------------------------------------------------- #
+# Documents
+# --------------------------------------------------------------------------- #
+
+
+class UploadResult(BaseModel):
+    """One element of the 201 array returned by the upload endpoint."""
+
+    filename: str
+    document_id: uuid.UUID | None = None
+    status: DocumentStatus | None = None
+    dedupe: bool = False
+    error_code: DocumentErrorCode | None = None
+
+
+class DocumentPublic(BaseModel):
+    """Status-poll shape for a single document."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    filename: str
+    mime: str
+    size_bytes: int
+    page_count: int | None
+    status: DocumentStatus
+    status_detail: str | None
+    error_code: DocumentErrorCode | None
+    chunk_count: int
+    embedding_model: str | None
+    embedding_dim: int | None
+
+
+# --------------------------------------------------------------------------- #
+# Public config
+# --------------------------------------------------------------------------- #
+
+
+class ConfigResponse(BaseModel):
+    """GET /api/config — UI bootstrap (max upload + registration mode)."""
+
+    max_upload_mb: int
+    registration_mode: str
+
+
 __all__ = [
     "RegisterRequest",
     "LoginRequest",
@@ -101,4 +146,7 @@ __all__ = [
     "ProjectCreate",
     "ProjectUpdate",
     "ProjectPublic",
+    "UploadResult",
+    "DocumentPublic",
+    "ConfigResponse",
 ]

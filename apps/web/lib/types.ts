@@ -92,3 +92,53 @@ export interface CreateProjectInput {
   name: string;
   description?: string;
 }
+
+// ---- Documents (ARCHITECTURE.md §6/§7, ADR-0013) ----------------------------
+
+/**
+ * Typed error codes a failed document carries (ADR-0013). Kept as a union so the
+ * UI can render a human reason; an unrecognized code falls back to a generic
+ * message rather than throwing.
+ */
+export type DocumentErrorCode =
+  | "OVERSIZE"
+  | "BAD_TYPE"
+  | "DECOMPRESSION_BOMB"
+  | "ENCRYPTED_PDF"
+  | "NO_TEXT"
+  | "PARSE_ERROR"
+  | "EMBED_ERROR"
+  | "TOO_MANY_CHUNKS";
+
+/**
+ * A document as returned by GET /api/projects/{id}/documents (poll target). The
+ * non-terminal stages drive the live status pill + per-stage progress; `failed`
+ * carries an `error_code` reason. Optional fields tolerate a backend that omits
+ * them while a document is still queued.
+ */
+export interface DocumentItem {
+  id: string;
+  filename: string;
+  mime?: string | null;
+  size_bytes?: number | null;
+  page_count?: number | null;
+  status: DocumentStatus;
+  status_detail?: string | null;
+  error_code?: DocumentErrorCode | string | null;
+  chunk_count?: number | null;
+  embedding_model?: string | null;
+  embedding_dim?: number | null;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+/**
+ * Per-file result from POST /api/projects/{id}/documents (201). `dedupe` is true
+ * when the upload matched an existing document by (project_id, sha256).
+ */
+export interface DocumentUploadResult {
+  filename: string;
+  document_id: string;
+  status: DocumentStatus;
+  dedupe?: boolean;
+}

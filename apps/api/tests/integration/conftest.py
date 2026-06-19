@@ -65,8 +65,8 @@ async def admin_engine() -> AsyncIterator[AsyncEngine]:
     await engine.dispose()
 
 
-def _load_migration() -> ModuleType:
-    """Load the Phase-1 migration module directly from its file path.
+def _load_migration_file(filename: str, module_name: str) -> ModuleType:
+    """Load a migration module directly from its file path.
 
     The filename starts with a digit and ``alembic/versions`` is not a package,
     so we load it by spec rather than a dotted import.
@@ -75,12 +75,21 @@ def _load_migration() -> ModuleType:
     from pathlib import Path
 
     here = Path(__file__).resolve()
-    mig_path = here.parents[2] / "alembic" / "versions" / "0001_phase1_auth_tenancy.py"
-    spec = importlib.util.spec_from_file_location("phase1_migration", mig_path)
+    mig_path = here.parents[2] / "alembic" / "versions" / filename
+    spec = importlib.util.spec_from_file_location(module_name, mig_path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _load_migration() -> ModuleType:
+    """Load the Phase-1 migration module (back-compat helper)."""
+    return _load_migration_file("0001_phase1_auth_tenancy.py", "phase1_migration")
+
+
+def _load_phase2_migration() -> ModuleType:
+    return _load_migration_file("0002_phase2_ingestion.py", "phase2_migration")
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -91,6 +100,7 @@ async def schema(admin_engine: AsyncEngine) -> AsyncIterator[None]:
     from alembic.operations import Operations
 
     mig = _load_migration()
+    mig2 = _load_phase2_migration()
 
     async with admin_engine.connect() as conn:
         await conn.run_sync(_drop_all)
@@ -99,6 +109,7 @@ async def schema(admin_engine: AsyncEngine) -> AsyncIterator[None]:
             ctx = MigrationContext.configure(sync_conn)
             with Operations.context(ctx):
                 mig.upgrade()
+                mig2.upgrade()
 
         await conn.run_sync(_run_upgrade)
 
@@ -151,7 +162,8 @@ async def app_db(schema: None, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator
     async with cleaner.connect() as conn:
         await conn.execute(
             text(
-                "TRUNCATE refresh_tokens, auth_identities, projects, "
+                "TRUNCATE chunks, ingest_jobs, documents, operator_default, "
+                "refresh_tokens, auth_identities, projects, "
                 "invites, system_settings, users RESTART IDENTITY CASCADE"
             )
         )

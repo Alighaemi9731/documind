@@ -23,6 +23,12 @@ dependencies = [
     "argon2-cffi",
     "pyjwt",
     "cryptography",
+    "google-genai",
+    "pypdf",
+    "python-docx",
+    "markitdown",
+    "defusedxml",
+    "python-multipart",
 ]
 
 [project.optional-dependencies]

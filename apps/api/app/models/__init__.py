@@ -10,7 +10,11 @@ from __future__ import annotations
 
 from app.models.auth_identity import AuthIdentity
 from app.models.base import Base, TimestampMixin
+from app.models.chunk import Chunk
+from app.models.document import Document
+from app.models.ingest_job import IngestJob
 from app.models.invite import Invite
+from app.models.operator_default import OperatorDefault
 from app.models.project import Project
 from app.models.refresh_token import RefreshToken
 from app.models.system_settings import SystemSettings
@@ -20,7 +24,11 @@ __all__ = [
     "Base",
     "TimestampMixin",
     "AuthIdentity",
+    "Chunk",
+    "Document",
+    "IngestJob",
     "Invite",
+    "OperatorDefault",
     "Project",
     "RefreshToken",
     "SystemSettings",

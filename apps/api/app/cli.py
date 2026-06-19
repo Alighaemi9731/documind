@@ -12,9 +12,11 @@ import argparse
 import asyncio
 import sys
 
+from app.core.config import settings
 from app.core.db import admin_session, dispose_engine
-from app.models.enums import UserRole, UserStatus
+from app.models.enums import Provider, UserRole, UserStatus
 from app.models.user import User
+from app.providers.keystore.operator_default import seed_operator_default
 from app.services.auth_service import get_user_by_email, normalize_email
 from app.services.settings_service import ensure_system_settings
 
@@ -47,12 +49,27 @@ async def _bootstrap_admin(email: str) -> str:
         return "reconciled" if changed else "unchanged"
 
 
+async def _seed_operator_key(key: str | None) -> str:
+    """Seed the operator-default Gemini key from arg or env (idempotent)."""
+    raw = key or settings.operator_default_gemini_key
+    if not raw:
+        raise RuntimeError("No key provided (pass --key or set OPERATOR_DEFAULT_GEMINI_KEY).")
+    async with admin_session() as session:
+        row = await seed_operator_default(session, raw, provider=Provider.google.value)
+    return f"seeded {row.provider} (version {row.key_version}, {row.key_fingerprint})"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="app.cli", description="DocuMind admin CLI")
     sub = parser.add_subparsers(dest="command", required=True)
 
     boot = sub.add_parser("bootstrap-admin", help="Idempotently upsert an admin user")
     boot.add_argument("--email", required=True, help="Admin account email")
+
+    seed = sub.add_parser("seed-operator-key", help="Seed/rotate the operator Gemini key")
+    seed.add_argument(
+        "--key", required=False, help="Key (defaults to env OPERATOR_DEFAULT_GEMINI_KEY)"
+    )
 
     args = parser.parse_args(argv)
 
@@ -65,6 +82,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"bootstrap-admin: {result} ({args.email})")
         return 0
 
+    if args.command == "seed-operator-key":
+        try:
+            result = asyncio.run(_run_seed(args.key))
+        except Exception as exc:  # noqa: BLE001 - surface a clean CLI error
+            print(f"seed-operator-key failed: {exc}", file=sys.stderr)
+            return 1
+        print(f"seed-operator-key: {result}")
+        return 0
+
     parser.print_help()
     return 2
 
@@ -72,6 +98,13 @@ def main(argv: list[str] | None = None) -> int:
 async def _run_bootstrap(email: str) -> str:
     try:
         return await _bootstrap_admin(email)
+    finally:
+        await dispose_engine()
+
+
+async def _run_seed(key: str | None) -> str:
+    try:
+        return await _seed_operator_key(key)
     finally:
         await dispose_engine()
 

@@ -1,0 +1,8 @@
+DocuMind ingestion smoke fixture.
+
+This small plain-text document exists only so the Phase-2 e2e test can upload a
+real file, watch a document row appear in the project view, and poll its status
+pill until it reaches a terminal state (ready or failed). The content is
+intentionally short — a few sentences are enough to produce at least one chunk
+and one embedding through the ingestion pipeline (parse -> chunk -> embed ->
+store) so the happy path is exercised end to end.

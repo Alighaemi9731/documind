@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     default_provider: str = "google"
     max_upload_mb: int = 25
     ingest_concurrency: int = 1
+    uploads_dir: str = "/data/uploads"
+    # Per-user cap on simultaneously-pending ingest jobs (429 over limit).
+    max_pending_ingest_per_user: int = 20
     enable_local_embeddings: bool = False
     grounding_min_score: float = 0.55
     access_token_ttl_minutes: int = 15

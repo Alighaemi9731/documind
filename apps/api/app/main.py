@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 import logging
 from contextlib import asynccontextmanager
 
@@ -35,12 +37,40 @@ async def lifespan(app: FastAPI):
         engine = None
 
     app.state.engine = engine
+
+    # In-process ingest worker (ADR-0005). Started ONLY outside the test
+    # environment — tests drive ingestion synchronously via process_one().
+    worker_task: asyncio.Task[None] | None = None
+    if engine is not None and settings.environment.lower() != "test":
+        worker_task = asyncio.create_task(_run_ingest_worker())
+        logger.info("Ingest worker started")
+
+    app.state.worker_task = worker_task
     try:
         yield
     finally:
+        if worker_task is not None:
+            worker_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await worker_task
         if engine is not None:
             await dispose_engine()
             logger.info("Database engine disposed")
+
+
+async def _run_ingest_worker() -> None:
+    """Resolve the shared embedder once and run the bounded ingest loop."""
+    from app.core.db import admin_session
+    from app.ingestion.storage import read_document_bytes
+    from app.ingestion.worker import run_forever
+    from app.models.enums import Provider
+    from app.providers import registry
+    from app.providers.keystore.operator_default import load_operator_key
+
+    async with admin_session() as session:
+        secret = await load_operator_key(session, provider=Provider.google.value)
+    embedder = registry.load_embedding_adapter(registry.GEMINI_SPEC, secret.reveal())
+    await run_forever(embedder, read_bytes=read_document_bytes)
 
 
 app = FastAPI(title="DocuMind API", version=__version__, lifespan=lifespan)

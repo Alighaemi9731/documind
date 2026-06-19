@@ -6,6 +6,18 @@ All notable changes to DocuMind are documented here. Format follows
 
 ## [Unreleased]
 
+### Added — Phase 2 (Document Ingestion)
+- **Pipeline:** upload → guards → parse → chunk → embed → store, driven by an in-process asyncio worker (ADR-0005) that claims `ingest_jobs` with `FOR UPDATE SKIP LOCKED` + lease, sets the tenant GUC from `job.owner_id`, and advances `DocumentStatus` (queued→parsing→chunking→embedding→ready). Documents/chunks tables have RLS `FORCE` with **owner-only policies and no admin bypass** (content tables).
+- **Storage:** `chunks` use an unbounded pgvector **`halfvec`** column + a generated `tsvector('simple')` column; chunks are stamped server-side with `owner_id`/`project_id`/`embedding_dim` and reject dimension mismatches; per-dim partial HNSW index is built lazily (deferred, ADR-0003).
+- **Provider slice (ADR-0014):** `LLMProvider`/`EmbeddingProvider` Protocols, a `ProviderSpec` registry, a per-capability two-tier resolver (operator-default Gemini for now; BYOK in Phase 4), Fernet keystore + env-seeded `operator_default`, and a Gemini embedding adapter (`gemini-embedding-001` @768, manual L2 normalize). Projects pin their embedding identity at creation.
+- **API:** `POST/GET/DELETE /api/projects/{id}/documents`, `…/reprocess`, and public `GET /api/config`; per-user upload rate limit + pending-job cap.
+- **Frontend:** `FileDropzone`, `StatusPill`, document-status polling (visibility-aware, stops on terminal), and a project view with upload + document list + reprocess/delete.
+- **Tests:** 92 backend tests pass against real pgvector — parsers (incl. a Persian fixture), chunker, guards (each `DocumentErrorCode`), end-to-end embed/store with a deterministic fake embedder, dim-mismatch reject, ingest-job state machine + lease re-claim, worker GUC from `job.owner_id`, **document/chunk cross-tenant isolation**, and dedupe.
+
+### Security (Phase 2 review hardening)
+- Worker now fails poison jobs (catch-all → `failed`) instead of re-claiming forever, with an `attempts` ceiling + a reaper for crash-stuck jobs; the Gemini adapter normalizes SDK rate-limit/quota/5xx errors to a `ProviderTransientError` that the worker treats as a non-failing retry. DOCX XXE validation now covers **every** XML part (not just `document.xml`). Key fingerprints are sha256-only (no raw key tail). Reprocess clears stale embedding metadata and resets `attempts`.
+- Known follow-up: the upload path still buffers the (capped) file once in RAM after streaming — a future optimization will compute the hash during the stream and guard from the file handle.
+
 ### Added — Phase 1 (Auth + Tenancy)
 - **Tenant isolation (dual-layer):** app-layer `TenantScope` as the sole tenant data path **+** Postgres RLS `FORCE`, driven by one hardened async session factory (`core/db.py`) that `SET LOCAL`s the tenant GUC per transaction (request **and** worker), **resets it on pool check-in**, and asserts it before tenant queries. The admin RLS bypass is confined to the `users` metadata table — tenant *content* (`projects`, future docs/chunks) has owner-only policies with no bypass.
 - **Auth:** argon2id passwords (rehash-on-login, semaphore-bounded), HS256 JWTs with pinned-algorithm decode + `token_version` revocation, opaque sha256-hashed refresh tokens with rotation, family reuse-detection, a grace window, and chain-advance replay detection. `REGISTRATION_MODE` = open | approval | invite, bootstrap-admin reconciliation, per-IP **and** per-email login rate limiting.

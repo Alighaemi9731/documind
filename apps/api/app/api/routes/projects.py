@@ -15,6 +15,7 @@ from app.api.deps import TenantScopeDep
 from app.api.errors import api_error
 from app.api.schemas import ProjectCreate, ProjectPublic, ProjectUpdate
 from app.models.project import Project
+from app.providers.resolver import default_embedding_spec
 
 router = APIRouter()
 
@@ -30,13 +31,20 @@ async def list_projects(scope: TenantScopeDep) -> list[ProjectPublic]:
 async def create_project(payload: ProjectCreate, scope: TenantScopeDep) -> ProjectPublic:
     """Create a project owned by the current tenant.
 
-    Embedding pin columns stay NULL in Phase 1; the Phase-2 provider slice
-    populates them at creation (default operator Gemini).
+    The embedding identity is PINNED at creation from the operator-default
+    Gemini ProviderSpec (ADR-0014/0003). The pin is immutable thereafter except
+    via an explicit re-embed job (ADR-0015).
     """
+    spec = default_embedding_spec()
+    emb = spec.embedding
     project = Project(
         owner_id=scope.user_id,
         name=payload.name,
         description=payload.description,
+        embedding_provider=spec.id,
+        embedding_model=emb.model if emb is not None else None,
+        embedding_dim=emb.dim if emb is not None else None,
+        embedding_normalized=emb.normalized if emb is not None else None,
     )
     await scope.add(project)
     return ProjectPublic.model_validate(project)

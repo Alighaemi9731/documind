@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/Button";
@@ -127,14 +128,16 @@ export default function DashboardPage() {
       ) : (
         <ul className="flex flex-col gap-3">
           {projects.map((project) => (
-            <li
-              key={project.id}
-              className="rounded-2xl border border-border bg-card p-5 transition-colors hover:bg-muted"
-            >
-              <h2 className="text-base font-medium text-card-foreground">{project.name}</h2>
-              {project.description ? (
-                <p className="mt-1 text-sm text-muted-foreground">{project.description}</p>
-              ) : null}
+            <li key={project.id}>
+              <Link
+                href={`/projects/${project.id}`}
+                className="block rounded-2xl border border-border bg-card p-5 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              >
+                <h2 className="text-base font-medium text-card-foreground">{project.name}</h2>
+                {project.description ? (
+                  <p className="mt-1 text-sm text-muted-foreground">{project.description}</p>
+                ) : null}
+              </Link>
             </li>
           ))}
         </ul>

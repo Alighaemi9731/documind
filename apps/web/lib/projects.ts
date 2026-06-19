@@ -15,6 +15,10 @@ export function listProjects(): Promise<Project[]> {
   return apiFetch<Project[]>("/projects");
 }
 
+export function getProject(projectId: string): Promise<Project> {
+  return apiFetch<Project>(`/projects/${projectId}`);
+}
+
 export function createProject(input: CreateProjectInput): Promise<Project> {
   return apiFetch<Project>("/projects", {
     method: "POST",
