@@ -1,4 +1,11 @@
+import os
+import sys
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Minimum JWT signing-secret length in bytes (>= 256-bit / 32 bytes). The app
+# refuses to start with a weaker secret (see Settings.validate_secrets).
+MIN_JWT_SECRET_BYTES = 32
 
 
 class Settings(BaseSettings):
@@ -43,6 +50,63 @@ class Settings(BaseSettings):
     log_level: str = "info"
     environment: str = "production"
     public_base_url: str = "https://localhost"
+
+    @property
+    def refresh_cookie_secure(self) -> bool:
+        """Refresh/CSRF cookies are Secure unless explicitly in development.
+
+        Tests and local HTTP development set ENVIRONMENT=development so the
+        cookie is accepted over plain HTTP; production always sets Secure.
+        """
+        return self.environment.lower() != "development"
+
+    def allowed_origins(self) -> set[str]:
+        """Origins accepted on cookie-bearing POSTs (refresh/logout).
+
+        Derived from PUBLIC_BASE_URL (the configured apex). Origin/Referer of
+        a cookie POST must match one of these (ADR-0001 allow-list).
+        """
+        origins: set[str] = set()
+        base = self.public_base_url.rstrip("/")
+        if base.startswith("https://"):
+            origins.add(base)
+        if self.domain:
+            origins.add(f"https://{self.domain}")
+        if self.environment.lower() == "development":
+            # Local HTTP dev only — never weakens production.
+            if self.domain:
+                origins.add(f"http://{self.domain}")
+            origins.update({"http://localhost:3000", "http://127.0.0.1:3000"})
+        return origins
+
+    def validate_secrets(self) -> None:
+        """Fail fast on weak/missing secrets. Call from lifespan/startup.
+
+        The ENVIRONMENT=test skip applies ONLY when actually running under
+        pytest, so a production deploy cannot bypass validation by setting
+        ENVIRONMENT=test. Raises RuntimeError so a misconfigured deploy refuses
+        to boot.
+        """
+        running_under_pytest = "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
+        if self.environment.lower() == "test" and running_under_pytest:
+            return
+        secret = self.jwt_secret or ""
+        if len(secret.encode("utf-8")) < MIN_JWT_SECRET_BYTES:
+            raise RuntimeError(
+                "JWT_SECRET must be at least "
+                f"{MIN_JWT_SECRET_BYTES} bytes (256-bit); refusing to start."
+            )
+        # If a Fernet master key is configured it must be valid (BYOK in Phase 4
+        # depends on it). Not yet *required* to be set.
+        if self.master_key_fernet:
+            try:
+                from cryptography.fernet import Fernet
+
+                Fernet(self.master_key_fernet.encode("utf-8"))
+            except Exception as exc:  # noqa: BLE001
+                raise RuntimeError(
+                    "MASTER_KEY_FERNET is not a valid Fernet key; refusing to start."
+                ) from exc
 
 
 settings = Settings()

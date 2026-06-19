@@ -2,12 +2,17 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Minimal security-headers middleware (Phase 0 stub).
+ * Security-headers + CSP-nonce middleware.
  *
- * Generates a per-request CSP nonce, exposes it via the `x-nonce` request
- * header, and sets a baseline set of security headers on the response. The
- * CSP itself is intentionally left as a stub to be hardened in a later phase.
+ * Generates a per-request CSP nonce (exposed via the `x-nonce` request header)
+ * and sets baseline security headers. The authoritative auth guard is
+ * client-side in the `(app)` layout (redirects to /login once bootstrap shows
+ * no user) plus the API itself; we deliberately do NOT gate here on the refresh
+ * cookie, because it is Path-scoped to /api/auth and is therefore never sent on
+ * an app navigation like /dashboard (a cookie check here would misfire). The
+ * matcher skips /api, static assets, and image optimization.
  */
+
 export function middleware(request: NextRequest) {
   const nonce = crypto.randomUUID().replace(/-/g, "");
 
@@ -33,7 +38,7 @@ export const config = {
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
-     * - api (API routes)
+     * - api (API routes, incl. the auth cookie-proxy route handler)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico, and common static asset extensions

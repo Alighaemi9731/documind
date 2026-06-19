@@ -1,12 +1,15 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import create_async_engine
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import __version__
 from app.api import api_router
 from app.core.config import settings
+from app.core.db import dispose_engine, get_engine
 
 logging.basicConfig(level=settings.log_level.upper())
 logger = logging.getLogger("documind.api")
@@ -14,15 +17,18 @@ logger = logging.getLogger("documind.api")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Create the async SQLAlchemy engine on startup, dispose on shutdown.
+    """Validate secrets, create the hardened async engine, dispose on shutdown.
 
-    Engine creation is wrapped in try/except so the app still starts when
-    the configured DATABASE_URL is a placeholder or unreachable. In that
-    case app.state.engine is None and readiness checks report not_ready.
+    ``settings.validate_secrets()`` fails fast on a weak/missing JWT secret in
+    non-test environments. Engine creation is wrapped so the app still starts
+    when DATABASE_URL is a placeholder/unreachable; readiness then reports
+    not_ready.
     """
+    settings.validate_secrets()
+
     engine = None
     try:
-        engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+        engine = get_engine()
         logger.info("Database engine created")
     except Exception as exc:  # noqa: BLE001 - never block startup
         logger.warning("Could not create database engine: %s", exc)
@@ -33,10 +39,44 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         if engine is not None:
-            await engine.dispose()
+            await dispose_engine()
             logger.info("Database engine disposed")
 
 
 app = FastAPI(title="DocuMind API", version=__version__, lifespan=lifespan)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    """Emit the canonical ``{error:{code,message,field?}}`` envelope (section 6).
+
+    ``api_error`` already packs ``detail={"error": {...}}``; surface it at the
+    top level. Any other HTTPException is wrapped into the same shape.
+    """
+    detail = exc.detail
+    if isinstance(detail, dict) and "error" in detail:
+        return JSONResponse(status_code=exc.status_code, content=detail)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": "http_error", "message": str(detail)}},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Map request-body validation errors to a 422 in the canonical shape."""
+    errors = exc.errors()
+    first = errors[0] if errors else {}
+    loc = [str(p) for p in first.get("loc", []) if p not in ("body", "query", "path")]
+    error: dict[str, str] = {
+        "code": "validation_error",
+        "message": str(first.get("msg", "Invalid request.")),
+    }
+    if loc:
+        error["field"] = ".".join(loc)
+    return JSONResponse(status_code=422, content={"error": error})
+
 
 app.include_router(api_router, prefix="/api")

@@ -13,15 +13,18 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Read the async database URL from the environment. No models registered yet
-# in Phase 0, so target_metadata stays None.
+# Read the async database URL from the environment.
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql+asyncpg://documind:@postgres:5432/documind",
 )
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
-target_metadata = None
+# Importing the models package registers every aggregate on Base.metadata so
+# autogenerate / target_metadata sees the full Phase-1 schema.
+from app.models import Base  # noqa: E402
+
+target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:

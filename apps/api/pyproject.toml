@@ -13,11 +13,16 @@ dependencies = [
     "fastapi",
     "uvicorn[standard]",
     "pydantic-settings",
+    "pydantic[email]",
+    "email-validator",
     "sqlalchemy[asyncio]",
     "asyncpg",
     "alembic",
     "pgvector",
     "httpx",
+    "argon2-cffi",
+    "pyjwt",
+    "cryptography",
 ]
 
 [project.optional-dependencies]

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+import { AuthProvider } from "@/lib/auth-context";
+
 export const metadata: Metadata = {
   title: "DocuMind",
   description: "Self-hostable multi-tenant RAG platform.",
@@ -20,7 +22,7 @@ export default function RootLayout({
         className="min-h-screen bg-background text-foreground antialiased"
         style={{ fontFamily: fontStack }}
       >
-        {children}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

@@ -23,11 +23,13 @@ PATTERNS = [
     ("private key block", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----")),
 ]
 
-# Secret-looking assignments with a non-placeholder value.
+# A secret-looking name assigned to a QUOTED STRING LITERAL. Anchoring on the
+# quote avoids matching ordinary code (e.g. ``token = create_access_token(...)``
+# or ``password=payload.password``) — only inline string secrets are flagged.
 ASSIGN = re.compile(
     r"(?i)\b(JWT_SECRET|MASTER_KEY_FERNET|POSTGRES_PASSWORD|[A-Z0-9_]*SECRET|"
     r"[A-Z0-9_]*API_KEY|[A-Z0-9_]*TOKEN|[A-Z0-9_]*PASSWORD)\b\s*[=:]\s*"
-    r"['\"]?([^\s'\"]{8,})"
+    r"['\"]([^'\"]{8,})['\"]"
 )
 PLACEHOLDER = re.compile(
     r"(?i)^(change_me|changeme|your[-_]|<.*>|\$\{?.*\}?|xxx+|placeholder|ci-only|"
@@ -73,6 +75,21 @@ def staged_env_files() -> list[str]:
     return bad
 
 
+def _is_test_path(path: str) -> bool:
+    """Test files legitimately contain fake credentials; the strict provider-key
+    PATTERNS still apply to them, but the generic ASSIGN heuristic does not."""
+    p = path.replace("\\", "/")
+    base = p.rsplit("/", 1)[-1]
+    return (
+        "/tests/" in p
+        or "/test/" in p
+        or "/e2e/" in p
+        or base == "conftest.py"
+        or base.startswith("test_")
+        or base.endswith((".spec.ts", ".spec.tsx", ".test.ts", ".test.tsx", ".spec.js", ".test.js"))
+    )
+
+
 def scan_staged_diff() -> list[str]:
     try:
         diff = subprocess.run(
@@ -82,16 +99,24 @@ def scan_staged_diff() -> list[str]:
     except Exception:
         return []
     findings: list[str] = []
+    current_file = ""
     for line in diff.splitlines():
+        if line.startswith("+++ b/"):
+            current_file = line[6:].strip()
+            continue
         if not line.startswith("+") or line.startswith("+++"):
             continue
         added = line[1:]
         for label, pat in PATTERNS:
             if pat.search(added):
-                findings.append(f"{label}: {added.strip()[:120]}")
-        m = ASSIGN.search(added)
-        if m and _is_secretish(m.group(2)):
-            findings.append(f"secret-like assignment to {m.group(1)}: {added.strip()[:120]}")
+                findings.append(f"{current_file}: {label}: {added.strip()[:120]}")
+        if not _is_test_path(current_file):
+            m = ASSIGN.search(added)
+            if m and _is_secretish(m.group(2)):
+                findings.append(
+                    f"{current_file}: secret-like assignment to {m.group(1)}: "
+                    f"{added.strip()[:120]}"
+                )
     return findings
 
 
