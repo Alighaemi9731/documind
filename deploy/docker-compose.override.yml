@@ -1,0 +1,29 @@
+# DocuMind — local development overlay (build from source, publish ports).
+# Apply explicitly alongside the base file (see `make dev`):
+#   docker compose --env-file .env -f deploy/docker-compose.yml -f deploy/docker-compose.override.yml up --build
+# Not auto-loaded (the base file lives in deploy/, not the CWD).
+name: documind
+
+services:
+  api:
+    build:
+      context: ../apps/api
+      dockerfile: Dockerfile.api
+    image: ghcr.io/${IMAGE_OWNER:-documind-app}/documind-api:${IMAGE_TAG:-latest}
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL: debug
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: ../apps/web
+      dockerfile: Dockerfile.web
+    image: ghcr.io/${IMAGE_OWNER:-documind-app}/documind-web:${IMAGE_TAG:-latest}
+    ports:
+      - "3000:3000"
+
+  postgres:
+    ports:
+      - "5432:5432"

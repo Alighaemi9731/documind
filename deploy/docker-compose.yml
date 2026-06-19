@@ -1,0 +1,123 @@
+# DocuMind — production compose (default profile).
+# Run from the repo root via the Makefile, e.g.:
+#   docker compose --env-file .env -f deploy/docker-compose.yml up -d
+# Only `caddy` publishes host ports. api/web/postgres are internal-only.
+name: documind
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    env_file:
+      - ../.env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    mem_limit: 96m
+    logging: *default-logging
+
+  api:
+    image: ghcr.io/${IMAGE_OWNER:-documind-app}/documind-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-documind}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-documind}
+    volumes:
+      - uploads:/data/uploads
+    expose:
+      - "8000"
+    mem_limit: 512m
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health/live').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  web:
+    image: ghcr.io/${IMAGE_OWNER:-documind-app}/documind-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      - api
+    env_file:
+      - ../.env
+    expose:
+      - "3000"
+    mem_limit: 256m
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-documind}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-documind}
+    command:
+      - postgres
+      - -c
+      - listen_addresses=*
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=20
+      - -c
+      - effective_cache_size=512MB
+      - -c
+      - jit=off
+      - -c
+      - max_parallel_workers_per_gather=0
+      - -c
+      - huge_pages=off
+      - -c
+      - wal_compression=on
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    expose:
+      - "5432"
+    mem_limit: 512m
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-documind} -d ${POSTGRES_DB:-documind}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pgdata:
+  uploads:

@@ -1,0 +1,41 @@
+# DocuMind reverse proxy + automatic HTTPS.
+# Single apex domain, same-origin. Caddy obtains & renews Let's Encrypt certs
+# automatically (HTTP-01 on port 80) and redirects HTTP->HTTPS by default.
+
+{
+	email {$ACME_EMAIL}
+	# admin off  # uncomment to disable the local admin API in hardened deployments
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Cap request bodies at the same limit the API enforces (uploads).
+	request_body {
+		max_size {$MAX_UPLOAD_MB}MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), microphone=(), camera=()"
+		-Server
+		# NOTE: Content-Security-Policy is set per-request (with a nonce) by the
+		# Next.js middleware, not here.
+	}
+
+	# API (FastAPI). flush_interval -1 keeps SSE token streams unbuffered.
+	@api path /api/*
+	handle @api {
+		reverse_proxy api:8000 {
+			flush_interval -1
+		}
+	}
+
+	# Everything else -> Next.js standalone server.
+	handle {
+		reverse_proxy web:3000
+	}
+}

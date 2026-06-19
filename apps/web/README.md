@@ -1,0 +1,3 @@
+# documind-web
+
+The DocuMind web frontend: a Next.js 15 (App Router) + React 19 + TypeScript 5 + Tailwind CSS 3.4 application built as a standalone server (`output: "standalone"`). In Phase 0 this is a static landing shell only (no authentication or data fetching). It listens on container-internal port `3000` and is served same-origin behind Caddy, which reverse-proxies `/api/*` to the API and everything else to this service. Use `npm run dev` for local development, `npm run build` to produce the standalone bundle, `npm run lint` / `npm run typecheck` for static checks, and `npm run test` via Playwright (set `RUN_E2E=1` with a running server) for the smoke test.
