@@ -4,6 +4,11 @@
 
 {
 	email {$ACME_EMAIL}
+	# ACME directory. Defaults to Let's Encrypt production; the installer points
+	# this at the LE *staging* CA when DOCUMIND_ACME_STAGING=1 so smoke tests on
+	# throwaway hosts don't burn the production rate limit (staging certs are
+	# untrusted by browsers — never use staging for a real deployment).
+	acme_ca {$ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
 	# admin off  # uncomment to disable the local admin API in hardened deployments
 }
 

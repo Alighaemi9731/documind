@@ -6,7 +6,7 @@
 
 </div>
 
-> ⚠️ Early development — Phase 0 (scaffolding) is in place. See [ARCHITECTURE.md](ARCHITECTURE.md) and [CHANGELOG.md](CHANGELOG.md).
+See [ARCHITECTURE.md](ARCHITECTURE.md), the [operating runbook](docs/operating.md), and [CHANGELOG.md](CHANGELOG.md).
 
 ## Why
 - **Private & self-hosted** — your documents and questions stay on your server.
@@ -18,16 +18,25 @@
 
 ## Install (one line)
 ```bash
-curl -fsSL https://example.com/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/documind-app/documind/main/install.sh | bash
 ```
-You'll be asked for a domain and an admin email (and optionally a free Gemini key). The installer obtains HTTPS certificates automatically (Caddy + Let's Encrypt) and brings the stack up. *(Installer ships in Phase 6.)*
+You'll be asked for a **domain** and an **admin email** (and optionally a free [Gemini key](https://aistudio.google.com/apikey)). On a 2 GB box that's it: the installer preflights the host, generates and **preserves** secrets, pulls the public images, obtains HTTPS certificates automatically (Caddy + Let's Encrypt), runs migrations, and brings everything up — then prints your URL. It's **idempotent**: re-run it any time to upgrade; your secrets and data are preserved.
+
+Unattended? Pass the answers in the environment:
+```bash
+DOMAIN=docs.example.com ADMIN_EMAIL=you@example.com GEMINI_KEY=AIza... \
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/documind-app/documind/main/install.sh)"
+```
+See the [operating runbook](docs/operating.md) for backup/restore, secret rotation, the ACME/HTTPS troubleshooting table, and upgrades.
+
+## Screenshots
+See [docs/screenshots/](docs/screenshots/) (dashboard, project Q&A with citations, admin, light/dark, RTL). Regenerate them from a running stack with `cd apps/web && RUN_E2E=1 npm run test:e2e`.
 
 ## Develop
 Requires Python 3.12, Node 24, and (for the full stack) Docker.
 ```bash
-make api-install      # backend venv + deps
-make web-install      # frontend deps
-make lint test        # ruff/mypy/pytest + eslint/prettier/tsc
+make install          # backend venv + deps, frontend deps
+make lint test        # ruff/mypy/pytest + eslint/prettier/tsc + Vitest
 make dev              # full stack via docker compose (published ports)
 ```
 See [CLAUDE.md](CLAUDE.md) for the developer guide and conventions.

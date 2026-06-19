@@ -36,3 +36,6 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Generated README screenshots (regenerate via e2e/screenshots.spec.ts)
+docs/screenshots/*.png
