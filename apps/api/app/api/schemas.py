@@ -5,18 +5,55 @@ Shapes mirror ARCHITECTURE.md section 6 exactly. Secrets never appear here.
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models.enums import (
     Capability,
     DocumentErrorCode,
     DocumentStatus,
+    RegistrationMode,
     UserRole,
     UserStatus,
 )
+
+# Branding defaults (used by GET /api/config and GET /api/admin/settings when the
+# system_settings.branding JSON is empty / partially populated). The accent is a
+# sensible Apple-style blue; logo defaults to None (text wordmark).
+DEFAULT_APP_NAME = "DocuMind"
+DEFAULT_ACCENT_COLOR = "#0071E3"
+# Accent allow-list, mirrored EXACTLY by the client's normalizeAccent
+# (apps/web/lib/branding.tsx): a 3- or 6-digit hex, OR a Tailwind-style HSL
+# channel triple ("221 83% 53%") consumed by hsl(var(--accent)). Both forms are
+# free of CSS-breaking characters, so neither can escape the custom-property
+# value the client applies via the CSSOM. Anything else is rejected (422 on
+# write) / dropped to the default (on read).
+_HEX_COLOR_RE = r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+_HSL_TRIPLE_RE = r"^\d{1,3}\s+\d{1,3}%\s+\d{1,3}%$"
+
+
+def _is_safe_accent(value: str) -> bool:
+    """True iff ``value`` is an allow-listed accent color (hex or HSL triple)."""
+    return bool(re.match(_HEX_COLOR_RE, value) or re.match(_HSL_TRIPLE_RE, value))
+
+
+def _safe_relative_logo(value: str) -> str | None:
+    """Return ``value`` iff it is a relative, same-origin path; else ``None``.
+
+    Rejects schemes (``http:``), protocol-relative (``//host``), and bare hosts —
+    anything that could introduce a third-party origin under the strict CSP.
+    """
+    if value == "":
+        return None
+    if "://" in value or value.startswith("//") or ":" in value.split("/")[0]:
+        return None
+    if not value.startswith("/"):
+        return None
+    return value
+
 
 # --------------------------------------------------------------------------- #
 # Auth
@@ -149,11 +186,47 @@ class QueryRequest(BaseModel):
 # --------------------------------------------------------------------------- #
 
 
+class BrandingPublic(BaseModel):
+    """Branding surfaced to the UI (public config + admin settings).
+
+    ``app_name`` is plain text and MUST be rendered as text by the client (never
+    as HTML). ``logo_url`` is always a relative, same-origin path or None.
+    """
+
+    app_name: str = DEFAULT_APP_NAME
+    accent_color: str = DEFAULT_ACCENT_COLOR
+    logo_url: str | None = None
+
+
+def branding_from_stored(stored: dict[str, object] | None) -> BrandingPublic:
+    """Build a :class:`BrandingPublic` from the stored branding JSON.
+
+    Missing/empty fields fall back to defaults so the UI always has a complete,
+    safe branding payload even on a fresh install or a partial admin write.
+    """
+    data = stored or {}
+    app_name = data.get("app_name")
+    accent = data.get("accent_color")
+    logo = data.get("logo_url")
+    # Re-validate on READ too: even though writes are validated, a value that
+    # predates a tightened rule (or a hand-edited row) must never reach the DOM.
+    safe_accent = (
+        accent if isinstance(accent, str) and _is_safe_accent(accent) else DEFAULT_ACCENT_COLOR
+    )
+    safe_logo = _safe_relative_logo(logo) if isinstance(logo, str) else None
+    return BrandingPublic(
+        app_name=app_name if isinstance(app_name, str) and app_name.strip() else DEFAULT_APP_NAME,
+        accent_color=safe_accent,
+        logo_url=safe_logo,
+    )
+
+
 class ConfigResponse(BaseModel):
-    """GET /api/config — UI bootstrap (max upload + registration mode)."""
+    """GET /api/config — UI bootstrap (upload cap, registration mode, branding)."""
 
     max_upload_mb: int
     registration_mode: str
+    branding: BrandingPublic
 
 
 # --------------------------------------------------------------------------- #
@@ -309,6 +382,88 @@ class OperatorKeyRotateRequest(BaseModel):
     api_key: str = Field(min_length=1, max_length=4096)
 
 
+# --------------------------------------------------------------------------- #
+# Admin — system settings + branding
+# --------------------------------------------------------------------------- #
+
+
+class BrandingUpdate(BaseModel):
+    """Subset-write of branding. Each field validated and stored as plain text.
+
+    All fields optional so the admin can PATCH-style update one knob at a time.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    app_name: str | None = Field(default=None, min_length=1, max_length=80)
+    accent_color: str | None = Field(default=None, max_length=32)
+    logo_url: str | None = Field(default=None, max_length=512)
+
+    @field_validator("app_name")
+    @classmethod
+    def _clean_app_name(cls, value: str | None) -> str | None:
+        """Strip control characters and collapse whitespace (defense-in-depth).
+
+        ``app_name`` is rendered as plain text (never HTML), so this is cosmetic
+        hardening: a stray newline / NUL can't change meaning, only spacing.
+        """
+        if value is None:
+            return None
+        cleaned = re.sub(r"\s+", " ", "".join(ch for ch in value if ch.isprintable())).strip()
+        if not cleaned:
+            raise ValueError("app_name must contain visible characters")
+        return cleaned
+
+    @field_validator("accent_color")
+    @classmethod
+    def _validate_accent(cls, value: str | None) -> str | None:
+        """Accept only an allow-listed accent (hex or HSL triple), matching the
+        client's normalizeAccent. Keeps client and server in lockstep so a value
+        the UI accepts is never rejected here (and vice-versa)."""
+        if value is None or value == "":
+            return None
+        if not _is_safe_accent(value):
+            raise ValueError("accent_color must be a #hex or 'H S% L%' value")
+        return value
+
+    @field_validator("logo_url")
+    @classmethod
+    def _validate_logo_url(cls, value: str | None) -> str | None:
+        """Only a relative, same-origin path (or empty) is allowed.
+
+        Absolute/external URLs are rejected to avoid mixed-content and to keep
+        the strict CSP (no third-party origins) intact. Empty string clears it.
+        """
+        if value is None or value == "":
+            return None
+        safe = _safe_relative_logo(value)
+        if safe is None:
+            raise ValueError("logo_url must be a relative, same-origin path")
+        return safe
+
+
+class AdminSettingsPublic(BaseModel):
+    """GET/PUT /api/admin/settings — install-wide knobs + branding."""
+
+    registration_mode: RegistrationMode
+    default_provider: str
+    signups_enabled: bool
+    default_monthly_token_limit: int
+    branding: BrandingPublic
+
+
+class AdminSettingsUpdate(BaseModel):
+    """PUT /api/admin/settings — any subset of the install-wide knobs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    registration_mode: RegistrationMode | None = None
+    default_provider: str | None = Field(default=None, min_length=1, max_length=32)
+    signups_enabled: bool | None = None
+    default_monthly_token_limit: int | None = Field(default=None, ge=0)
+    branding: BrandingUpdate | None = None
+
+
 __all__ = [
     "RegisterRequest",
     "LoginRequest",
@@ -323,6 +478,8 @@ __all__ = [
     "DocumentPublic",
     "QueryRequest",
     "ConfigResponse",
+    "BrandingPublic",
+    "branding_from_stored",
     "KeyMetadataPublic",
     "KeyCreateRequest",
     "KeyCreateResponse",
@@ -342,4 +499,7 @@ __all__ = [
     "UsageResponse",
     "OperatorKeyPublic",
     "OperatorKeyRotateRequest",
+    "BrandingUpdate",
+    "AdminSettingsPublic",
+    "AdminSettingsUpdate",
 ]

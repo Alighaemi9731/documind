@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Tech stack
 - **Backend** `apps/api`: Python 3.12, FastAPI + uvicorn (1 worker), SQLAlchemy 2.0 (async) + Alembic, PostgreSQL 16 + **pgvector** (one DB for relational **and** vectors).
-- **Frontend** `apps/web`: Next.js 15 (App Router, `output: 'standalone'`) + TypeScript + Tailwind 3.4. No SSR data fetching; client → FastAPI via TanStack Query.
+- **Frontend** `apps/web`: Next.js 15 (App Router, `output: 'standalone'`) + TypeScript + Tailwind 3.4. No SSR data fetching; client → FastAPI via a small fetch wrapper (in-memory Bearer + single-flight refresh), streaming via `fetch` + `ReadableStream` (no TanStack/EventSource). Framer Motion is lazy-loaded only. Light/dark + RTL via design-token CSS variables.
 - **Proxy/TLS**: Caddy 2 (automatic Let's Encrypt). **Packaging**: Docker Compose, single `.env`, `Makefile`. Images published to public GHCR; never built on the VPS.
 
 ## Repository map
@@ -18,7 +18,7 @@ apps/api/app/    core/(config,security,db,text_norm)  models/  security/scoping.
                  api/routes/(auth,projects,documents,query,settings,admin,health)
                  services/  ingestion/(guards,parsers,chunker,worker,store)
                  rag/(retrieval,budget,prompt,injection,grounding,answer)  providers/(interfaces,registry,resolver,keystore,adapters)
-apps/web/        app/  components/ui/  lib/  middleware.ts
+apps/web/        app/(admin dashboard at app/(app)/admin)  components/ui/  components/admin/  lib/(theme,branding,direction,admin,api)  middleware.ts  tests/(vitest)  e2e/(playwright)
 deploy/          docker-compose.yml (+override)  Caddyfile  postgres/  backup/
 docs/decisions/  ADR-0001..0017            install.sh  Makefile  .env.example
 ```
@@ -27,7 +27,7 @@ docs/decisions/  ADR-0001..0017            install.sh  Makefile  .env.example
 Local dev (no Docker needed for backend unit work):
 - `make api-install` — create `apps/api/.venv` (python3.12) + install deps.
 - `make api-lint` / `make api-fmt` / `make api-test` — ruff + mypy / format / pytest.
-- `make web-install` / `make web-lint` / `make web-build` — npm + eslint/prettier/tsc / next build.
+- `make web-install` / `make web-lint` / `make web-build` / `make web-test` — npm + eslint/prettier/tsc / next build / Vitest unit+component. `make web-e2e` runs Playwright (needs a running stack).
 - `make lint` / `make test` / `make fmt` — aggregate.
 Run a single backend test: `cd apps/api && .venv/bin/pytest tests/test_health.py::<name> -q`.
 Full stack (needs Docker): `make dev` (build + published ports) or `make up` (prod). `make config` validates compose. `make migrate` runs Alembic in the api container.

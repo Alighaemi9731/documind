@@ -2,31 +2,121 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Self-hosted Persian font (Vazirmatn). A small subset (.woff2) is shipped under
+ * /public/fonts so there is NO Google Fonts dependency and the strict CSP holds.
+ * It is appended AFTER the SF/system stack: Latin glyphs resolve to the system
+ * font, Persian/Arabic glyphs fall through to Vazirmatn. `font-display: swap`
+ * keeps text visible while the subset loads (no invisible-text flash).
+ */
+@font-face {
+  font-family: "Vazirmatn";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/Vazirmatn-subset.woff2") format("woff2");
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+200C-200D, U+FB50-FDFF, U+FE70-FEFF;
+}
+
 :root {
+  /* ---- Color tokens (HSL channels; consumed via hsl(var(--token))) ---- */
   --background: 0 0% 100%;
   --foreground: 0 0% 9%;
-  --muted: 0 0% 96%;
-  --muted-foreground: 0 0% 40%;
+  --muted: 240 5% 96%;
+  --muted-foreground: 240 4% 42%;
   --accent: 221 83% 53%;
   --accent-foreground: 0 0% 100%;
-  --border: 0 0% 90%;
+  --border: 240 6% 90%;
   --card: 0 0% 100%;
   --card-foreground: 0 0% 9%;
-  --radius: 0.75rem;
+  --ring: var(--accent);
+
+  /* Semantic status hues (paired with text labels, never color-alone). */
+  --success: 142 71% 38%;
+  --warning: 38 92% 45%;
+  --danger: 0 72% 51%;
+
+  /* Glass surface for the nav (translucent background + hairline). */
+  --glass: 0 0% 100%;
+
+  /* ---- Radius scale (large, Apple-like) ---- */
+  --radius: 0.875rem;
+
+  /* ---- Soft, layered shadows ---- */
+  --shadow-sm: 0 1px 2px 0 hsl(240 6% 10% / 0.04);
+  --shadow-md: 0 4px 16px -2px hsl(240 6% 10% / 0.08), 0 2px 6px -2px hsl(240 6% 10% / 0.05);
+  --shadow-lg: 0 12px 32px -8px hsl(240 6% 10% / 0.14), 0 6px 14px -6px hsl(240 6% 10% / 0.08);
+  --shadow-xl: 0 24px 64px -12px hsl(240 6% 10% / 0.22), 0 8px 24px -8px hsl(240 6% 10% / 0.12);
 }
 
 .dark {
-  --background: 0 0% 7%;
+  --background: 240 6% 7%;
   --foreground: 0 0% 96%;
-  --muted: 0 0% 14%;
-  --muted-foreground: 0 0% 64%;
+  --muted: 240 5% 15%;
+  --muted-foreground: 240 5% 66%;
   --accent: 217 91% 60%;
   --accent-foreground: 0 0% 100%;
-  --border: 0 0% 18%;
-  --card: 0 0% 10%;
+  --border: 240 5% 19%;
+  --card: 240 6% 10%;
   --card-foreground: 0 0% 96%;
+  --ring: var(--accent);
+
+  --success: 142 65% 45%;
+  --warning: 38 92% 55%;
+  --danger: 0 72% 60%;
+
+  --glass: 240 6% 10%;
+
+  --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.3);
+  --shadow-md: 0 4px 16px -2px hsl(0 0% 0% / 0.45), 0 2px 6px -2px hsl(0 0% 0% / 0.4);
+  --shadow-lg: 0 12px 32px -8px hsl(0 0% 0% / 0.55), 0 6px 14px -6px hsl(0 0% 0% / 0.45);
+  --shadow-xl: 0 24px 64px -12px hsl(0 0% 0% / 0.6), 0 8px 24px -8px hsl(0 0% 0% / 0.5);
 }
 
 * {
   border-color: hsl(var(--border));
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  /* Smooth color transition when toggling the theme. */
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+/* When the document/content language is Persian, the Vazirmatn fallback leads. */
+:lang(fa) {
+  font-family: "Vazirmatn", var(--font-sans);
+}
+
+/* Respect the user's motion preference everywhere. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Subtle fade/slide-in used by lightweight (non-Framer) entrances. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.18s ease-out both;
 }

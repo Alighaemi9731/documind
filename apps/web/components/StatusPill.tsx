@@ -50,8 +50,8 @@ const STYLES: Record<DocumentStatus, string> = {
   parsing: "bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400",
   chunking: "bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400",
   embedding: "bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400",
-  ready: "bg-green-500/10 text-green-700 border-green-500/30 dark:text-green-400",
-  failed: "bg-red-500/10 text-red-600 border-red-500/40 dark:text-red-400",
+  ready: "bg-success/10 text-success border-success/30",
+  failed: "bg-danger/10 text-danger border-danger/40",
 };
 
 /** Human-readable reasons for each typed error code (ADR-0013). */

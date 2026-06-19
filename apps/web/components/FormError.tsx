@@ -19,7 +19,7 @@ export function FormError({ message, className }: FormErrorProps) {
     <div
       role="alert"
       className={cn(
-        "rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400",
+        "rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger",
         className,
       )}
     >

@@ -31,6 +31,29 @@ export function middleware(request: NextRequest) {
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   response.headers.set("X-DNS-Prefetch-Control", "off");
 
+  // Strict, nonce-based CSP (ARCHITECTURE.md §11/§14):
+  //  - script-src: per-request nonce + strict-dynamic so Next/Framer's own
+  //    nonce-tagged loader can pull its chunks; NO unsafe-inline scripts, NO
+  //    third-party CDNs. `'self'` keeps same-origin bundles (incl. lazy Framer)
+  //    working. The pre-hydration ThemeScript carries this nonce.
+  //  - style-src: 'self' + 'unsafe-inline' is required for Tailwind/React inline
+  //    styles (e.g. progress width); this does NOT weaken script execution.
+  //  - connect-src: same-origin only (the apex domain) — no external calls.
+  //  - font-src/img-src: self only (fonts are self-hosted; logos are same-origin).
+  const csp = [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+  ].join("; ");
+  response.headers.set("Content-Security-Policy", csp);
+
   return response;
 }
 

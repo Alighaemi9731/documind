@@ -21,6 +21,8 @@ from sqlalchemy import func, select
 from app.api.deps import AdminUser
 from app.api.errors import api_error
 from app.api.schemas import (
+    AdminSettingsPublic,
+    AdminSettingsUpdate,
     AdminUserList,
     AdminUserPublic,
     InviteCreateRequest,
@@ -33,17 +35,21 @@ from app.api.schemas import (
     QuotaUpdate,
     UsagePoint,
     UsageResponse,
+    branding_from_stored,
 )
+from app.core.config import settings as app_settings
 from app.core.db import admin_session
 from app.core.security import generate_refresh_token, hash_refresh_token
 from app.models.enums import Provider, UserRole, UserStatus
 from app.models.invite import Invite
 from app.models.operator_default import OperatorDefault
 from app.models.provider_key import ProviderKey
+from app.models.system_settings import SystemSettings
 from app.models.usage import UsageEvent, UserQuota
 from app.models.user import User
 from app.providers.keystore import crypto
 from app.providers.keystore.operator_default import seed_operator_default
+from app.services.settings_service import ensure_system_settings
 
 router = APIRouter()
 
@@ -403,6 +409,85 @@ async def rotate_operator_key(
             fingerprint=row.key_fingerprint,
             key_version=row.key_version,
         )
+
+
+# --------------------------------------------------------------------------- #
+# System settings + branding (install-wide singleton)
+# --------------------------------------------------------------------------- #
+
+
+_BRANDING_LIMIT_KEY = "_default_monthly_token_limit"
+
+
+def _stored_limit(row: SystemSettings) -> int:
+    """Effective default monthly token limit: row override if set, else env default."""
+    value = (row.branding or {}).get(_BRANDING_LIMIT_KEY)
+    if isinstance(value, int) and value >= 0:
+        return value
+    return app_settings.default_monthly_token_limit
+
+
+def _settings_public(row: SystemSettings) -> AdminSettingsPublic:
+    """Project the singleton row into the public admin-settings shape.
+
+    The default monthly token limit is persisted as a private key inside the
+    branding JSON (no dedicated column yet) and never leaks into the public
+    branding payload; branding falls back to defaults for any unset field.
+    """
+    return AdminSettingsPublic(
+        registration_mode=row.registration_mode,
+        default_provider=row.default_provider,
+        signups_enabled=row.signups_enabled,
+        default_monthly_token_limit=_stored_limit(row),
+        branding=branding_from_stored(row.branding),
+    )
+
+
+@router.get("/settings", response_model=AdminSettingsPublic)
+async def get_settings(_admin: AdminUser) -> AdminSettingsPublic:
+    """Read install-wide settings + branding (DB singleton, env defaults)."""
+    async with admin_session() as session:
+        row = await ensure_system_settings(session)
+        return _settings_public(row)
+
+
+@router.put("/settings", response_model=AdminSettingsPublic)
+async def update_settings(payload: AdminSettingsUpdate, _admin: AdminUser) -> AdminSettingsPublic:
+    """Persist any subset of install-wide settings + branding.
+
+    Validation (registration_mode enum, accent-color hex, same-origin logo path,
+    bounded app_name) is enforced by the request schema; this handler only
+    applies the provided fields. Returns the updated settings.
+    """
+    async with admin_session() as session:
+        row = await ensure_system_settings(session)
+        # Copy the stored JSON up front; the limit override lives alongside the
+        # public branding fields (no dedicated column yet) and must be preserved.
+        branding = dict(row.branding or {})
+        if payload.registration_mode is not None:
+            row.registration_mode = payload.registration_mode
+        if payload.default_provider is not None:
+            row.default_provider = payload.default_provider
+        if payload.signups_enabled is not None:
+            row.signups_enabled = payload.signups_enabled
+        if payload.default_monthly_token_limit is not None:
+            branding[_BRANDING_LIMIT_KEY] = payload.default_monthly_token_limit
+        if payload.branding is not None:
+            # Merge onto the stored branding so a partial write keeps other fields.
+            updates = payload.branding.model_dump(exclude_unset=True)
+            if "app_name" in updates:
+                branding["app_name"] = updates["app_name"]
+            if "accent_color" in updates:
+                branding["accent_color"] = updates["accent_color"]
+            if "logo_url" in updates:
+                # Validator normalizes "" -> None; None clears the stored logo.
+                if updates["logo_url"] is None:
+                    branding.pop("logo_url", None)
+                else:
+                    branding["logo_url"] = updates["logo_url"]
+        row.branding = branding
+        await session.flush()
+        return _settings_public(row)
 
 
 __all__ = ["router"]

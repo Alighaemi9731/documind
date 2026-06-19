@@ -189,6 +189,129 @@ async def test_usage_timeseries(client: AsyncClient) -> None:
     assert "series" in resp.json()
 
 
+async def test_settings_non_admin_forbidden(client: AsyncClient) -> None:
+    token = await _register(client, "settings-plain@example.com")
+    h = {"Authorization": f"Bearer {token}"}
+    assert (await client.get("/api/admin/settings", headers=h)).status_code == 403
+    assert (
+        await client.put("/api/admin/settings", json={"signups_enabled": False}, headers=h)
+    ).status_code == 403
+
+
+async def test_settings_get_put_roundtrip(client: AsyncClient) -> None:
+    admin_token = await _admin_token(client)
+    ha = {"Authorization": f"Bearer {admin_token}"}
+
+    got = await client.get("/api/admin/settings", headers=ha)
+    assert got.status_code == 200
+    body = got.json()
+    assert body["registration_mode"] == "open"
+    assert set(body["branding"]) == {"app_name", "accent_color", "logo_url"}
+    assert "default_monthly_token_limit" in body
+
+    put = await client.put(
+        "/api/admin/settings",
+        json={
+            "registration_mode": "invite",
+            "signups_enabled": False,
+            "default_monthly_token_limit": 12345,
+            "branding": {
+                "app_name": "Acme Docs",
+                "accent_color": "#1A2B3C",
+                "logo_url": "/static/logo.svg",
+            },
+        },
+        headers=ha,
+    )
+    assert put.status_code == 200
+    updated = put.json()
+    assert updated["registration_mode"] == "invite"
+    assert updated["signups_enabled"] is False
+    assert updated["default_monthly_token_limit"] == 12345
+    assert updated["branding"]["app_name"] == "Acme Docs"
+    assert updated["branding"]["accent_color"] == "#1A2B3C"
+    assert updated["branding"]["logo_url"] == "/static/logo.svg"
+
+    # Round-trip: GET reflects the persisted changes.
+    again = (await client.get("/api/admin/settings", headers=ha)).json()
+    assert again["registration_mode"] == "invite"
+    assert again["signups_enabled"] is False
+    assert again["default_monthly_token_limit"] == 12345
+    assert again["branding"]["app_name"] == "Acme Docs"
+
+    # Partial write keeps prior branding fields (only accent changes here).
+    partial = await client.put(
+        "/api/admin/settings",
+        json={"branding": {"accent_color": "#FFFFFF"}},
+        headers=ha,
+    )
+    assert partial.status_code == 200
+    pb = partial.json()["branding"]
+    assert pb["accent_color"] == "#FFFFFF"
+    assert pb["app_name"] == "Acme Docs"
+    assert pb["logo_url"] == "/static/logo.svg"
+
+
+async def test_settings_branding_validation(client: AsyncClient) -> None:
+    admin_token = await _admin_token(client)
+    ha = {"Authorization": f"Bearer {admin_token}"}
+
+    # Bad accent colors (not an allow-listed hex / HSL triple) -> 422. The accent
+    # allow-list mirrors the client's normalizeAccent EXACTLY, so anything that
+    # could break out of the CSSOM custom-property value is rejected.
+    for bad in ("red", "#FF", "#12345", "rgb(1,2,3)", "url(x)", "0 0% 0%; color:red"):
+        resp = await client.put(
+            "/api/admin/settings",
+            json={"branding": {"accent_color": bad}},
+            headers=ha,
+        )
+        assert resp.status_code == 422, bad
+
+    # Allow-listed accents accepted: 3- and 6-digit hex, and an HSL channel triple.
+    for ok in ("#FFF", "#0A0B0C", "221 83% 53%"):
+        resp = await client.put(
+            "/api/admin/settings",
+            json={"branding": {"accent_color": ok}},
+            headers=ha,
+        )
+        assert resp.status_code == 200, ok
+        assert resp.json()["branding"]["accent_color"] == ok
+
+    # External / absolute logo_url -> 422 (CSP / mixed-content guard).
+    for bad_logo in ("https://evil.example.com/logo.png", "//cdn.example.com/x.svg", "logo.svg"):
+        resp = await client.put(
+            "/api/admin/settings",
+            json={"branding": {"logo_url": bad_logo}},
+            headers=ha,
+        )
+        assert resp.status_code == 422, bad_logo
+
+    # Invalid registration_mode -> 422.
+    bad_mode = await client.put(
+        "/api/admin/settings",
+        json={"registration_mode": "bogus"},
+        headers=ha,
+    )
+    assert bad_mode.status_code == 422
+
+
+async def test_config_exposes_branding(client: AsyncClient) -> None:
+    admin_token = await _admin_token(client)
+    ha = {"Authorization": f"Bearer {admin_token}"}
+    await client.put(
+        "/api/admin/settings",
+        json={"branding": {"app_name": "Branded", "accent_color": "#0A0B0C"}},
+        headers=ha,
+    )
+    cfg = await client.get("/api/config")
+    assert cfg.status_code == 200
+    branding = cfg.json()["branding"]
+    assert branding["app_name"] == "Branded"
+    assert branding["accent_color"] == "#0A0B0C"
+    # The private monthly-limit key never leaks into public branding.
+    assert "_default_monthly_token_limit" not in branding
+
+
 async def test_invites_lifecycle(client: AsyncClient) -> None:
     admin_token = await _admin_token(client)
     ha = {"Authorization": f"Bearer {admin_token}"}

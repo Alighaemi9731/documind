@@ -8,7 +8,7 @@ VENV := $(API)/.venv
 .DEFAULT_GOAL := help
 .PHONY: help up down dev logs ps pull config migrate makemigration backup restore \
         api-venv api-install api-lint api-fmt api-test web-install web-lint web-build \
-        web-test install lint test fmt bootstrap-admin
+        web-test web-e2e install lint test fmt bootstrap-admin
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -59,13 +59,15 @@ web-lint: ## eslint + prettier check + tsc
 	cd $(WEB) && npm run lint && npm run format:check && npm run typecheck
 web-build: ## Production build
 	cd $(WEB) && npm run build
-web-test: ## Playwright smoke test
-	cd $(WEB) && RUN_E2E=1 npm test
+web-test: ## Vitest unit + component tests
+	cd $(WEB) && npm test
+web-e2e: ## Playwright end-to-end smoke (needs a running stack)
+	cd $(WEB) && RUN_E2E=1 npm run test:e2e
 
 ## --- aggregate ---
 install: api-install web-install ## Install backend + frontend
 lint: api-lint web-lint ## Lint everything
-test: api-test ## Run unit tests
+test: api-test web-test ## Run unit + component tests
 fmt: api-fmt ## Format code
 
 ## --- ops ---

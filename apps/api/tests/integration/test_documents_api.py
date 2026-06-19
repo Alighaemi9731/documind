@@ -55,8 +55,9 @@ async def test_config_shape(client: AsyncClient) -> None:
     resp = await client.get("/api/config")
     assert resp.status_code == 200
     body = resp.json()
-    assert set(body) == {"max_upload_mb", "registration_mode"}
+    assert set(body) == {"max_upload_mb", "registration_mode", "branding"}
     assert isinstance(body["max_upload_mb"], int)
+    assert set(body["branding"]) == {"app_name", "accent_color", "logo_url"}
 
 
 async def test_upload_then_list_and_dedupe(client: AsyncClient) -> None:

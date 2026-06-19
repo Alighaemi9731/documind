@@ -66,12 +66,26 @@ export interface RefreshResponse {
   expires_in?: number;
 }
 
-// ---- Config -----------------------------------------------------------------
+// ---- Config / branding ------------------------------------------------------
+
+/**
+ * Branding surfaced by GET /api/config and GET/PUT /api/admin/settings
+ * (ARCHITECTURE.md §11). `app_name` is PLAIN TEXT and must be rendered as text
+ * (never HTML). `accent_color` is applied via the CSSOM
+ * (`document.documentElement.style.setProperty`) — never an inline style
+ * attribute. `logo_url` is always a relative, same-origin path or null.
+ */
+export interface Branding {
+  app_name: string;
+  accent_color: string;
+  logo_url: string | null;
+}
 
 /** GET /api/config */
 export interface AppConfig {
   max_upload_mb: number;
   registration_mode: RegistrationMode;
+  branding?: Branding;
 }
 
 // ---- Projects ---------------------------------------------------------------
