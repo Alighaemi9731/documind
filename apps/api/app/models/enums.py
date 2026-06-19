@@ -60,6 +60,13 @@ class KeySource(enum.StrEnum):
     byok = "byok"
 
 
+class MessageRole(enum.StrEnum):
+    """Role of a chat message (messages.role, PG enum ``message_role``)."""
+
+    user = "user"
+    assistant = "assistant"
+
+
 class DocumentStatus(enum.StrEnum):
     """Ingestion lifecycle of a document (ARCHITECTURE.md section 6).
 
@@ -96,6 +103,7 @@ __all__ = [
     "Provider",
     "Capability",
     "KeySource",
+    "MessageRole",
     "DocumentStatus",
     "DocumentErrorCode",
 ]

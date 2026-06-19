@@ -11,7 +11,92 @@ from __future__ import annotations
 
 import hashlib
 import math
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+
+from app.providers.interfaces import ChatDelta, ChatResult
+
+
+class FakeChatProvider:
+    """A deterministic, offline streaming chat provider for tests.
+
+    Streams a scripted answer split into small pieces (so the sentinel-stripping
+    filter is exercised across arbitrary token boundaries) and appends the
+    grounding sentinel. ``chunk_size`` controls how finely the script is split.
+    ``called`` records whether the provider was invoked (so a refusal test can
+    assert NO chat call happened).
+    """
+
+    def __init__(
+        self,
+        answer: str,
+        *,
+        grounded: bool = True,
+        chunk_size: int = 3,
+        sentinel: str | None = None,
+    ) -> None:
+        self._answer = answer
+        if sentinel is not None:
+            self._sentinel = sentinel
+        else:
+            self._sentinel = "<<<GROUNDED:true>>>" if grounded else "<<<GROUNDED:false>>>"
+        self._chunk_size = max(1, chunk_size)
+        self.called = False
+        self.call_count = 0
+
+    @property
+    def _script(self) -> str:
+        return f"{self._answer}\n{self._sentinel}"
+
+    def chat(
+        self,
+        messages: Sequence[dict[str, str]],
+        *,
+        model: str,
+        system: str,
+        max_tokens: int,
+    ) -> ChatResult:
+        self.called = True
+        self.call_count += 1
+        return ChatResult(text=self._script, input_tokens=0, output_tokens=0)
+
+    def chat_stream(
+        self,
+        messages: Sequence[dict[str, str]],
+        *,
+        model: str,
+        system: str,
+        max_tokens: int,
+    ) -> Iterator[ChatDelta]:
+        self.called = True
+        self.call_count += 1
+        text = self._script
+        for i in range(0, len(text), self._chunk_size):
+            yield ChatDelta(text=text[i : i + self._chunk_size])
+
+
+class RaisingChatProvider:
+    """A chat provider whose stream raises mid-flight (exercises the SSE error
+    frame). The error message must NOT leak into the client stream."""
+
+    def __init__(self) -> None:
+        self.called = False
+
+    def chat(
+        self, messages: Sequence[dict[str, str]], *, model: str, system: str, max_tokens: int
+    ) -> ChatResult:
+        from app.providers.errors import ProviderTransientError
+
+        self.called = True
+        raise ProviderTransientError("429 RESOURCE_EXHAUSTED boom")
+
+    def chat_stream(
+        self, messages: Sequence[dict[str, str]], *, model: str, system: str, max_tokens: int
+    ) -> Iterator[ChatDelta]:
+        from app.providers.errors import ProviderTransientError
+
+        self.called = True
+        raise ProviderTransientError("429 RESOURCE_EXHAUSTED boom")
+        yield ChatDelta(text="")  # noqa: unreachable - makes this a generator
 
 
 class FakeEmbeddingProvider:
@@ -65,6 +150,8 @@ class TransientEmbeddingProvider(FakeEmbeddingProvider):
 
 
 __all__ = [
+    "FakeChatProvider",
+    "RaisingChatProvider",
     "FakeEmbeddingProvider",
     "WrongDimEmbeddingProvider",
     "RaisingEmbeddingProvider",

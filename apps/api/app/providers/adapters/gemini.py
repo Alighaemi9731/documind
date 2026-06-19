@@ -14,10 +14,11 @@ is unit-tested directly through :func:`l2_normalize`.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from typing import Any
 
 from app.providers.errors import ProviderAuthError, ProviderError, ProviderTransientError
+from app.providers.interfaces import ChatDelta, ChatResult
 
 # Task-type hints sent to the embedding endpoint.
 TASK_DOCUMENT = "RETRIEVAL_DOCUMENT"
@@ -25,6 +26,8 @@ TASK_QUERY = "RETRIEVAL_QUERY"
 
 DEFAULT_MODEL = "gemini-embedding-001"
 DEFAULT_DIM = 768
+# Operator-default Gemini chat model (ADR-0006; Gemini is the shared default).
+DEFAULT_CHAT_MODEL = "gemini-2.0-flash"
 
 # Substrings that classify a raw SDK exception (status code or message).
 _TRANSIENT_MARKERS = (
@@ -130,11 +133,107 @@ class GeminiEmbeddingProvider:
         return self._dim
 
 
+class GeminiChatProvider:
+    """``LLMProvider`` backed by ``google-genai`` (chat + streaming chat).
+
+    Construct from an API-key string (the decrypted operator/BYOK key). The SDK
+    client is created lazily on first call so a default install does not import
+    ``google-genai`` until a real chat happens (ADR-0006). SDK exceptions are
+    normalized into the :mod:`app.providers.errors` taxonomy. The system prompt
+    is passed via ``system_instruction``; chat messages map to SDK ``contents``.
+    """
+
+    def __init__(self, api_key: str) -> None:
+        self._api_key = api_key
+        self._client: Any | None = None
+
+    def _get_client(self) -> Any:
+        if self._client is None:
+            from google import genai  # lazy import (ADR-0006)
+
+            self._client = genai.Client(api_key=self._api_key)
+        return self._client
+
+    @staticmethod
+    def _to_contents(messages: Sequence[dict[str, str]]) -> list[dict[str, Any]]:
+        """Map ``[{role, content}]`` to google-genai ``contents`` structures.
+
+        The assistant role is ``model`` in the Gemini schema; everything else is
+        ``user``.
+        """
+        contents: list[dict[str, Any]] = []
+        for msg in messages:
+            role = "model" if msg.get("role") == "assistant" else "user"
+            contents.append({"role": role, "parts": [{"text": msg.get("content", "")}]})
+        return contents
+
+    def _config(self, *, system: str, max_tokens: int) -> Any:
+        from google.genai import types  # lazy import
+
+        return types.GenerateContentConfig(
+            system_instruction=system,
+            max_output_tokens=max_tokens,
+        )
+
+    def chat(
+        self,
+        messages: Sequence[dict[str, str]],
+        *,
+        model: str,
+        system: str,
+        max_tokens: int,
+    ) -> ChatResult:
+        client = self._get_client()
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=self._to_contents(messages),
+                config=self._config(system=system, max_tokens=max_tokens),
+            )
+        except ProviderError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - normalize SDK errors
+            raise _translate_error(exc) from exc
+        text = getattr(response, "text", "") or ""
+        usage = getattr(response, "usage_metadata", None)
+        return ChatResult(
+            text=text,
+            input_tokens=int(getattr(usage, "prompt_token_count", 0) or 0),
+            output_tokens=int(getattr(usage, "candidates_token_count", 0) or 0),
+        )
+
+    def chat_stream(
+        self,
+        messages: Sequence[dict[str, str]],
+        *,
+        model: str,
+        system: str,
+        max_tokens: int,
+    ) -> Iterator[ChatDelta]:
+        client = self._get_client()
+        try:
+            stream = client.models.generate_content_stream(
+                model=model,
+                contents=self._to_contents(messages),
+                config=self._config(system=system, max_tokens=max_tokens),
+            )
+            for event in stream:
+                text = getattr(event, "text", None)
+                if text:
+                    yield ChatDelta(text=text)
+        except ProviderError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - normalize SDK errors
+            raise _translate_error(exc) from exc
+
+
 __all__ = [
     "GeminiEmbeddingProvider",
+    "GeminiChatProvider",
     "l2_normalize",
     "DEFAULT_MODEL",
     "DEFAULT_DIM",
+    "DEFAULT_CHAT_MODEL",
     "TASK_DOCUMENT",
     "TASK_QUERY",
 ]

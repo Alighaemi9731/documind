@@ -125,6 +125,19 @@ class DocumentPublic(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
+# Query (RAG)
+# --------------------------------------------------------------------------- #
+
+
+class QueryRequest(BaseModel):
+    """POST /api/projects/{id}/query body (section 6)."""
+
+    question: str = Field(min_length=1, max_length=8000)
+    stream: bool = True
+    conversation_id: uuid.UUID | None = None
+
+
+# --------------------------------------------------------------------------- #
 # Public config
 # --------------------------------------------------------------------------- #
 
@@ -148,5 +161,6 @@ __all__ = [
     "ProjectPublic",
     "UploadResult",
     "DocumentPublic",
+    "QueryRequest",
     "ConfigResponse",
 ]

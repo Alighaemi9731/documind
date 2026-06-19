@@ -5,10 +5,12 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/Button";
+import { ChatPanel } from "@/components/chat/ChatPanel";
 import { FileDropzone } from "@/components/FileDropzone";
 import { FormError } from "@/components/FormError";
 import { StatusPill, isTerminalStatus, statusLabel, statusProgress } from "@/components/StatusPill";
 import { ApiError } from "@/lib/api";
+import { cn } from "@/lib/cn";
 import { deleteDocument, reprocessDocument } from "@/lib/documents";
 import { getProject } from "@/lib/projects";
 import type { DocumentItem, Project } from "@/lib/types";
@@ -25,8 +27,12 @@ export default function ProjectPage() {
 
   const [project, setProject] = useState<Project | null>(null);
   const [projectError, setProjectError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"documents" | "chat">("documents");
 
   const { documents, isLoading, error, isPolling, refresh } = useDocumentStatus(projectId);
+
+  // Chat is only useful once at least one document is ready to retrieve over.
+  const hasReadyDocs = (documents ?? []).some((d) => d.status === "ready");
 
   // Per-document in-flight action ("reprocess" | "delete") to disable buttons.
   const [pendingAction, setPendingAction] = useState<Record<string, "reprocess" | "delete">>({});
@@ -110,48 +116,118 @@ export default function ProjectPage() {
         <FormError message={projectError} className="mt-2" />
       </div>
 
-      <section aria-label="Upload documents">
-        <FileDropzone projectId={projectId} onUploaded={() => void refresh()} />
-      </section>
+      <div
+        role="tablist"
+        aria-label="Project sections"
+        className="flex gap-1 border-b border-border"
+      >
+        <TabButton
+          id="documents"
+          label="Documents"
+          active={tab === "documents"}
+          onClick={() => setTab("documents")}
+        />
+        <TabButton id="chat" label="Chat" active={tab === "chat"} onClick={() => setTab("chat")} />
+      </div>
 
-      <section aria-label="Documents" className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-medium text-foreground">Documents</h2>
-          {documents && documents.length > 0 ? (
-            <Button variant="ghost" onClick={() => void refresh()}>
-              Refresh
-            </Button>
-          ) : null}
+      {tab === "documents" ? (
+        <div
+          role="tabpanel"
+          id="panel-documents"
+          aria-labelledby="tab-documents"
+          className="flex flex-col gap-6"
+        >
+          <section aria-label="Upload documents">
+            <FileDropzone projectId={projectId} onUploaded={() => void refresh()} />
+          </section>
+
+          <section aria-label="Documents" className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-medium text-foreground">Documents</h2>
+              {documents && documents.length > 0 ? (
+                <Button variant="ghost" onClick={() => void refresh()}>
+                  Refresh
+                </Button>
+              ) : null}
+            </div>
+
+            <FormError message={actionError} />
+
+            {isLoading ? (
+              <DocumentsSkeleton />
+            ) : error && (documents === null || documents.length === 0) ? (
+              <div className="flex flex-col items-start gap-3 rounded-2xl border border-border bg-card p-6">
+                <FormError message={error} />
+                <Button variant="secondary" onClick={() => void refresh()}>
+                  Retry
+                </Button>
+              </div>
+            ) : !documents || documents.length === 0 ? (
+              <EmptyDocuments />
+            ) : (
+              <ul className="flex flex-col gap-3">
+                {documents.map((doc) => (
+                  <DocumentRow
+                    key={doc.id}
+                    doc={doc}
+                    pending={pendingAction[doc.id]}
+                    onReprocess={() => void onReprocess(doc)}
+                    onDelete={() => void onDelete(doc)}
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
         </div>
-
-        <FormError message={actionError} />
-
-        {isLoading ? (
-          <DocumentsSkeleton />
-        ) : error && (documents === null || documents.length === 0) ? (
-          <div className="flex flex-col items-start gap-3 rounded-2xl border border-border bg-card p-6">
-            <FormError message={error} />
-            <Button variant="secondary" onClick={() => void refresh()}>
-              Retry
-            </Button>
-          </div>
-        ) : !documents || documents.length === 0 ? (
-          <EmptyDocuments />
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {documents.map((doc) => (
-              <DocumentRow
-                key={doc.id}
-                doc={doc}
-                pending={pendingAction[doc.id]}
-                onReprocess={() => void onReprocess(doc)}
-                onDelete={() => void onDelete(doc)}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
+      ) : (
+        <div
+          role="tabpanel"
+          id="panel-chat"
+          aria-labelledby="tab-chat"
+          className="flex flex-col gap-3"
+        >
+          {!hasReadyDocs ? (
+            <p className="rounded-xl border border-dashed border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+              Upload and ingest at least one document to start asking questions. Answers are drawn
+              strictly from this project&apos;s documents.
+            </p>
+          ) : null}
+          <ChatPanel projectId={projectId} />
+        </div>
+      )}
     </div>
+  );
+}
+
+function TabButton({
+  id,
+  label,
+  active,
+  onClick,
+}: {
+  id: "documents" | "chat";
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      id={`tab-${id}`}
+      aria-selected={active}
+      aria-controls={`panel-${id}`}
+      onClick={onClick}
+      className={cn(
+        "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        active
+          ? "border-accent text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {label}
+    </button>
   );
 }
 

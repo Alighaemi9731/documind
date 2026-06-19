@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import auth, config, documents, health, projects
+from app.api.routes import auth, config, documents, health, projects, query
 
 api_router = APIRouter()
 api_router.include_router(health.router, prefix="/health", tags=["health"])
@@ -10,5 +10,10 @@ api_router.include_router(
     documents.router,
     prefix="/projects/{project_id}/documents",
     tags=["documents"],
+)
+api_router.include_router(
+    query.router,
+    prefix="/projects/{project_id}/query",
+    tags=["query"],
 )
 api_router.include_router(config.router, prefix="/config", tags=["config"])

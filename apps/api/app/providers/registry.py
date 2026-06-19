@@ -11,15 +11,15 @@ from __future__ import annotations
 import importlib
 
 from app.models.enums import Capability, Provider
-from app.providers.adapters.gemini import DEFAULT_DIM, DEFAULT_MODEL
-from app.providers.interfaces import EmbeddingProvider
+from app.providers.adapters.gemini import DEFAULT_CHAT_MODEL, DEFAULT_DIM, DEFAULT_MODEL
+from app.providers.interfaces import EmbeddingProvider, LLMProvider
 from app.providers.spec import ModelSpec, ProviderSpec
 
 GEMINI_SPEC = ProviderSpec(
     id=Provider.google.value,
     label="Google Gemini",
     capabilities=(Capability.chat, Capability.embedding),
-    chat=ModelSpec(model="gemini-2.0-flash", max_input_tokens=1_000_000),
+    chat=ModelSpec(model=DEFAULT_CHAT_MODEL, max_input_tokens=1_000_000),
     embedding=ModelSpec(
         model=DEFAULT_MODEL,
         dim=DEFAULT_DIM,
@@ -29,6 +29,7 @@ GEMINI_SPEC = ProviderSpec(
     requires_byok=False,
     base_url="https://generativelanguage.googleapis.com",
     embedding_adapter="app.providers.adapters.gemini:GeminiEmbeddingProvider",
+    chat_adapter="app.providers.adapters.gemini:GeminiChatProvider",
 )
 
 _REGISTRY: dict[str, ProviderSpec] = {
@@ -60,9 +61,24 @@ def load_embedding_adapter(spec: ProviderSpec, api_key: str) -> EmbeddingProvide
     return adapter
 
 
+def load_chat_adapter(spec: ProviderSpec, api_key: str) -> LLMProvider:
+    """Lazily import + construct the chat adapter for ``spec``.
+
+    Constructed from the decrypted ``api_key`` string. Mirrors
+    :func:`load_embedding_adapter` so a default install imports the SDK only on
+    first chat use (ADR-0006).
+    """
+    module_path, _, class_name = spec.chat_adapter.partition(":")
+    module = importlib.import_module(module_path)
+    adapter_cls = getattr(module, class_name)
+    adapter: LLMProvider = adapter_cls(api_key)
+    return adapter
+
+
 __all__ = [
     "GEMINI_SPEC",
     "get_spec",
     "list_specs",
     "load_embedding_adapter",
+    "load_chat_adapter",
 ]

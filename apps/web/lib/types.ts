@@ -142,3 +142,64 @@ export interface DocumentUploadResult {
   status: DocumentStatus;
   dedupe?: boolean;
 }
+
+// ---- Chat / RAG query (ARCHITECTURE.md §6/§8, ADR-0008/0017) -----------------
+
+/**
+ * Canonical citation shape (ARCHITECTURE.md §6). Emitted in the SSE
+ * `citations` event and in the JSON fallback. The server has already validated
+ * every citation against the exact retrieved chunk-id set for the request
+ * (ADR-0008), so the client renders these as-is.
+ */
+export interface Citation {
+  chunk_id: string;
+  document_id: string;
+  filename: string;
+  /** 1-based page when known; null for formats without pages (e.g. plain text). */
+  page: number | null;
+  section_path: string | null;
+  chunk_index: number;
+  score: number;
+  snippet: string;
+}
+
+/**
+ * The authoritative `done` event (ARCHITECTURE.md §6/§8). `grounded` is the ONLY
+ * trustworthy grounding signal — the client must render the grounded/refusal
+ * state from this field, never by scraping the token stream (the server strips
+ * the `<<<GROUNDED…>>>` sentinel before forwarding). `grounded=false` means the
+ * answer is the localized "not in your documents" refusal.
+ */
+export interface QueryDoneEvent {
+  grounded: boolean;
+  provider?: string;
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+  };
+  message_id: string;
+}
+
+/**
+ * POST /api/projects/{id}/query JSON fallback (identical content to the stream,
+ * ARCHITECTURE.md §6). Used when streaming is unavailable; retrieval is
+ * idempotent so the citations reproduce the streamed set.
+ */
+export interface QueryJsonResponse {
+  answer: string;
+  citations: Citation[];
+  grounded: boolean;
+  used_chunks?: number;
+  provider?: string;
+  message_id: string;
+}
+
+/**
+ * Discriminated union yielded by the streaming chat client (lib/chat.ts) as it
+ * parses the SSE `token` / `citations` / `done` events.
+ */
+export type ChatStreamEvent =
+  | { type: "token"; text: string }
+  | { type: "citations"; citations: Citation[] }
+  | { type: "done"; grounded: boolean; messageId: string; done: QueryDoneEvent }
+  | { type: "error"; code: string; message: string };

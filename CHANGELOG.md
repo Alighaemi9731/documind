@@ -6,6 +6,18 @@ All notable changes to DocuMind are documented here. Format follows
 
 ## [Unreleased]
 
+### Added — Phase 3 (RAG core)
+- **Grounded, cited answers:** a project-scoped question is answered strictly from that project's chunks with server-validated citations, or refused ("not in your documents"). Hybrid retrieval = pgvector cosine + `tsvector('simple')` keyword fused by **RRF (k=60)** + a lightweight CPU rerank, all scoped `owner_id AND project_id AND embedding_dim`. The query embedding uses the same `text_norm` + `RETRIEVAL_QUERY` task type as ingest.
+- **Grounding gate (ADR-0008):** the **raw best-chunk cosine similarity** (not the RRF rank score) is the sole trust anchor — an off-topic question is refused **before any LLM call** (localized fa/en). The model's `<<<GROUNDED…>>>` sentinel is advisory and fail-closed (never upgrades grounded false→true); the server strips it from the token stream (bounded-lookahead filter) and emits the authoritative `grounded` only in the `done` event.
+- **Prompt-injection defenses:** operator instructions live in the system role; retrieved chunk text is fenced in per-request random-nonce delimiters and labeled untrusted; nonce/sentinel/fence-shaped strings inside chunk content are neutralized so a poisoned document cannot forge the fence, inject a sentinel, or exfiltrate.
+- **Streaming + persistence:** `POST /api/projects/{id}/query` → SSE (`token*` → `citations` → `done`) with an identical JSON fallback; conversations/messages persisted (RLS `FORCE`, owner-only, no admin bypass) so `message_id` is durable (ADR-0017; single-turn retrieval). Migration 0003. Added a `GeminiChatProvider` (chat + streaming, SDK-error normalized).
+- **Frontend chat:** streaming answers (fetch + ReadableStream, not EventSource — Bearer + single-flight refresh), inline citation chips, a sources panel, a distinct guarded "Not in your documents" state, and session history; model text rendered via safe markdown (HTML disabled).
+- **Tests:** 169 backend tests pass against real pgvector — incl. grounded-cited answers, off-doc refusal **with no chat call**, forged-citation drop, **cross-tenant isolation** on retrieval/citations/messages, sentinel stripping across token boundaries, fa/en + ZWNJ retrieval, SSE order, and JSON-fallback parity.
+
+### Fixed / Security (Phase 3 review hardening)
+- **Sentinel stripper case bug:** the partial-sentinel hold-back compared an uppercase opener against a lowercased suffix, so a sentinel split across tokens leaked and grounded answers were wrongly marked ungrounded — fixed (now verified across every byte boundary).
+- **SSE error handling (review HIGH):** a provider/resolver failure mid-stream previously truncated the body with no terminal frame; the stream now emits a well-formed `event: error` frame with a fixed message (no provider/key detail leaks), handled by the chat UI. Added a test asserting a raising chat provider yields a clean error frame.
+
 ### Added — Phase 2 (Document Ingestion)
 - **Pipeline:** upload → guards → parse → chunk → embed → store, driven by an in-process asyncio worker (ADR-0005) that claims `ingest_jobs` with `FOR UPDATE SKIP LOCKED` + lease, sets the tenant GUC from `job.owner_id`, and advances `DocumentStatus` (queued→parsing→chunking→embedding→ready). Documents/chunks tables have RLS `FORCE` with **owner-only policies and no admin bypass** (content tables).
 - **Storage:** `chunks` use an unbounded pgvector **`halfvec`** column + a generated `tsvector('simple')` column; chunks are stamped server-side with `owner_id`/`project_id`/`embedding_dim` and reject dimension mismatches; per-dim partial HNSW index is built lazily (deferred, ADR-0003).

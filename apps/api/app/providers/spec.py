@@ -35,8 +35,9 @@ class ProviderSpec:
     embedding: ModelSpec | None = None
     requires_byok: bool = False
     base_url: str = ""
-    # Dotted path to the adapter module + class, imported lazily on first use.
+    # Dotted paths to the adapter module + class, imported lazily on first use.
     embedding_adapter: str = ""
+    chat_adapter: str = ""
     extra: dict[str, str] = field(default_factory=dict)
 
 

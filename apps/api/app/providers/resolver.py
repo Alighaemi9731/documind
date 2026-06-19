@@ -25,20 +25,32 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.enums import Capability, KeySource
 from app.models.project import Project
 from app.providers import registry
-from app.providers.interfaces import EmbeddingProvider
+from app.providers.interfaces import EmbeddingProvider, LLMProvider
 from app.providers.keystore.operator_default import load_operator_key
 from app.providers.spec import ProviderSpec
 
 # --------------------------------------------------------------------------- #
-# Test override hook (process-level). Never set in production.
+# Test override hooks (process-level). Never set in production.
 # --------------------------------------------------------------------------- #
 _embedding_override: EmbeddingProvider | None = None
+_chat_override: LLMProvider | None = None
 
 
 def set_embedding_override(provider: EmbeddingProvider | None) -> None:
     """Install (or clear) a process-wide embedding adapter override for tests."""
     global _embedding_override
     _embedding_override = provider
+
+
+def set_chat_override(provider: LLMProvider | None) -> None:
+    """Install (or clear) a process-wide chat adapter override for tests.
+
+    Lets a deterministic streaming chat fake (emitting a chosen answer +
+    sentinel) be injected so the RAG answer path runs with no real network
+    call (no GEMINI key locally).
+    """
+    global _chat_override
+    _chat_override = provider
 
 
 @dataclass(frozen=True)
@@ -49,6 +61,16 @@ class ResolvedProvider:
     model: str
     key_source: KeySource
     dim: int
+    provider_id: str
+
+
+@dataclass(frozen=True)
+class ResolvedChatProvider:
+    """The outcome of resolving the chat capability."""
+
+    adapter: LLMProvider
+    model: str
+    key_source: KeySource
     provider_id: str
 
 
@@ -66,6 +88,11 @@ class UnsupportedCapability(ProviderResolutionError):
 
 def default_embedding_spec() -> ProviderSpec:
     """The operator-default embedding provider spec (Gemini in Phase 2)."""
+    return registry.GEMINI_SPEC
+
+
+def default_chat_spec() -> ProviderSpec:
+    """The operator-default chat provider spec (Gemini in Phase 3)."""
     return registry.GEMINI_SPEC
 
 
@@ -130,12 +157,51 @@ async def resolve(
     )
 
 
+async def resolve_chat(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+) -> ResolvedChatProvider:
+    """Resolve the chat provider (capability=chat).
+
+    Phase-3 path: operator default only (Gemini, ``key_source='shared'``). The
+    BYOK tier (Phase 4) slots in ahead of the shared branch without changing the
+    return shape. A process-level chat override lets tests inject a deterministic
+    streaming fake so no real network call happens.
+    """
+    spec = default_chat_spec()
+    if spec.chat is None:
+        raise UnsupportedCapability(f"{spec.id} does not offer a chat model.")
+
+    model = spec.chat.model
+
+    # --- TIER 1 (Phase 4): BYOK chat. Slots in here ahead of the shared branch.
+    # if byok := await _resolve_byok_chat(session, user_id): return byok
+
+    # --- TIER 2: shared operator default. ---
+    if _chat_override is not None:
+        adapter: LLMProvider = _chat_override
+    else:
+        secret = await load_operator_key(session, provider=spec.id)
+        adapter = registry.load_chat_adapter(spec, secret.reveal())
+
+    return ResolvedChatProvider(
+        adapter=adapter,
+        model=model,
+        key_source=KeySource.shared,
+        provider_id=spec.id,
+    )
+
+
 __all__ = [
     "ResolvedProvider",
+    "ResolvedChatProvider",
     "ProviderResolutionError",
     "EmbeddingPinMismatch",
     "UnsupportedCapability",
     "resolve",
+    "resolve_chat",
     "set_embedding_override",
+    "set_chat_override",
     "default_embedding_spec",
+    "default_chat_spec",
 ]
