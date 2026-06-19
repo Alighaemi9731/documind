@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     max_pending_ingest_per_user: int = 20
     enable_local_embeddings: bool = False
     grounding_min_score: float = 0.55
+    # Quota (ADR-0009): default per-user monthly token limit on the SHARED key,
+    # plus a global per-install ceiling on shared-key tokens as a hard backstop.
+    default_monthly_token_limit: int = 1_000_000
+    global_monthly_token_ceiling: int = 100_000_000
     access_token_ttl_minutes: int = 15
     refresh_token_ttl_days: int = 30
 

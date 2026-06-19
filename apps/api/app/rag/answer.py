@@ -33,7 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.text_norm import normalize
 from app.models.conversation import Conversation
-from app.models.enums import MessageRole
+from app.models.enums import Capability, MessageRole
 from app.models.message import Message
 from app.providers import resolver
 from app.rag import grounding
@@ -46,6 +46,7 @@ from app.rag.retrieval.keyword import keyword_search
 from app.rag.retrieval.rerank import rerank
 from app.rag.retrieval.vector import vector_search
 from app.rag.sentinel import SentinelStripper
+from app.services import quota_service
 
 # Max output tokens for the synthesis call (bounds connection hold, section 8).
 ANSWER_MAX_TOKENS = 1024
@@ -71,6 +72,9 @@ class AnswerPlan:
     provider_id: str
     model: str
     adapter: Any  # LLMProvider; Any to avoid importing the Protocol at runtime
+    # Quota reservation made BEFORE the LLM call (None on a refusal — no call).
+    reservation: quota_service.Reservation | None = None
+    project_id: uuid.UUID | None = None
 
 
 async def _ensure_conversation(
@@ -161,6 +165,13 @@ async def prepare_answer(
 
     resolved = await resolver.resolve_chat(session, user_id)
 
+    # Quota seam (ADR-0009): atomic pre-call reserve, enforced only on the shared
+    # operator key; BYOK chat bypasses. Reserved here, BEFORE the LLM call;
+    # reconciled in _persist_turn against the actual token usage.
+    reservation = await quota_service.check_and_reserve(
+        session, user_id=user_id, key_source=resolved.key_source
+    )
+
     return AnswerPlan(
         question=question,
         conversation_id=conv_id,
@@ -173,6 +184,8 @@ async def prepare_answer(
         provider_id=resolved.provider_id,
         model=resolved.model,
         adapter=resolved.adapter,
+        reservation=reservation,
+        project_id=project_id,
     )
 
 
@@ -271,6 +284,20 @@ async def _persist_turn(
     )
     session.add(assistant)
     await session.flush()
+
+    # Reconcile the shared-key quota reservation against actual usage + record the
+    # UsageEvent (no-op for BYOK beyond the analytics row). Only when the chat
+    # provider was actually invoked (a refusal carries no reservation).
+    if plan.reservation is not None:
+        await quota_service.record_usage(
+            session,
+            reservation=plan.reservation,
+            provider=result.provider or plan.provider_id,
+            capability=Capability.chat,
+            project_id=plan.project_id if plan.project_id is not None else project_id,
+            tokens_in=result.input_tokens,
+            tokens_out=result.output_tokens,
+        )
     return assistant.id
 
 

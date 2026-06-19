@@ -177,9 +177,7 @@ async def _json_response(
             )
         except ProviderResolutionError as exc:
             raise _resolution_error(exc) from exc
-        body = await answer_mod.answer_json(
-            session, plan, user_id=user_id, project_id=project_id
-        )
+        body = await answer_mod.answer_json(session, plan, user_id=user_id, project_id=project_id)
     return JSONResponse(content=body)
 
 

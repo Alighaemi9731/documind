@@ -55,9 +55,7 @@ async def embed_query_vector(
     Returns ``(vector, embedding_dim)``. The dim comes from the project pin via
     the resolver, so the vector leg can scope to ``embedding_dim`` exactly.
     """
-    resolved = await resolver.resolve(
-        session, user_id, Capability.embedding, project_id=project_id
-    )
+    resolved = await resolver.resolve(session, user_id, Capability.embedding, project_id=project_id)
     vector = resolved.adapter.embed_query(query_norm, model=resolved.model)
     return vector, resolved.dim
 

@@ -86,13 +86,7 @@ def build_user_prompt(
         blocks.append(f"{item.header}\n{body}")
     context = "\n\n".join(blocks)
 
-    return (
-        f"{open_d}\n"
-        f"{context}\n"
-        f"{close_d}\n"
-        "\n"
-        f"Question: {question}\n"
-    )
+    return f"{open_d}\n{context}\n{close_d}\n\nQuestion: {question}\n"
 
 
 def build_prompt(

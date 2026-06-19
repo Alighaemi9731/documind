@@ -19,6 +19,12 @@ class _Window:
     reset_at: float = 0.0
 
 
+# Registry of every live limiter so tests can reset all of them in one call
+# (every request in the test suite shares one client IP — without a reset the
+# counters accumulate across tests). Production never calls reset_all_limiters.
+_ALL_LIMITERS: list[RateLimiter] = []
+
+
 @dataclass
 class RateLimiter:
     """Fixed-window limiter. Not safe across processes (single uvicorn worker)."""
@@ -27,6 +33,9 @@ class RateLimiter:
     window_seconds: float = 60.0
     _buckets: dict[str, _Window] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def __post_init__(self) -> None:
+        _ALL_LIMITERS.append(self)
 
     def allow(self, key: str) -> bool:
         """Record an attempt for ``key``; return False once over the limit."""
@@ -53,9 +62,17 @@ login_email_limiter = RateLimiter(max_attempts=10, window_seconds=900.0)
 register_limiter = RateLimiter(max_attempts=20, window_seconds=3600.0)
 
 
+def reset_all_limiters() -> None:
+    """Clear every limiter's counters. Test-only (see ``_ALL_LIMITERS``)."""
+    for limiter in _ALL_LIMITERS:
+        with limiter._lock:
+            limiter._buckets.clear()
+
+
 __all__ = [
     "RateLimiter",
     "login_limiter",
     "login_email_limiter",
     "register_limiter",
+    "reset_all_limiters",
 ]

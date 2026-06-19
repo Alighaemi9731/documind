@@ -44,6 +44,7 @@ from app.models.project import Project
 from app.providers import resolver
 from app.providers.errors import ProviderTransientError
 from app.providers.interfaces import EmbeddingProvider
+from app.services import quota_service
 
 logger = logging.getLogger("documind.ingest")
 
@@ -170,13 +171,30 @@ async def process_job(
         resolved = await resolver.resolve(
             session, job.owner_id, Capability.embedding, project_id=project.id
         )
+        # Quota seam (ADR-0009): atomic pre-call reserve, enforced only when the
+        # shared operator key is used; BYOK embeds bypass. Reserve before the
+        # provider call, reconcile against actual token usage after.
+        reservation = await quota_service.check_and_reserve(
+            session, user_id=job.owner_id, key_source=resolved.key_source
+        )
+        chunk_texts = [c.normalized_content for c in chunks]
         try:
-            vectors = _embed_all(embedder, [c.normalized_content for c in chunks], resolved.model)
+            vectors = _embed_all(embedder, chunk_texts, resolved.model)
         except ProviderTransientError as exc:
             # Rate limit / quota / 5xx: do NOT fail. The claim lease provides the
             # backoff; the job is re-claimed and re-embedded after it expires.
             logger.warning("transient embed error (doc %s): %s", document.id, exc)
             raise TransientEmbedError(str(exc)) from exc
+        # Embeddings have no output tokens; charge an input-token estimate.
+        await quota_service.record_usage(
+            session,
+            reservation=reservation,
+            provider=resolved.provider_id,
+            capability=Capability.embedding,
+            project_id=project.id,
+            tokens_in=sum(c.token_count for c in chunks),
+            tokens_out=0,
+        )
 
         # ---- store -------------------------------------------------------- #
         await store.delete_document_chunks(session, document_id=document.id, owner_id=job.owner_id)

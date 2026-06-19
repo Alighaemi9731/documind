@@ -35,13 +35,20 @@ class _FakeResult:
 
 
 class _FakeSession:
-    """Returns a fixed project for any select (the resolver only selects one)."""
+    """Returns the fixed project ONLY for a Project select.
+
+    The Phase-4 resolver also queries ProviderSelection / ProviderKey for the
+    BYOK branch; with no BYOK configured those return None, so the shared tier is
+    exercised (this asserts BYOK-absent precedence).
+    """
 
     def __init__(self, project: object) -> None:
         self._project = project
 
-    async def execute(self, *_args, **_kwargs) -> _FakeResult:
-        return _FakeResult(self._project)
+    async def execute(self, statement, *_args, **_kwargs) -> _FakeResult:
+        if "projects" in str(statement).lower():
+            return _FakeResult(self._project)
+        return _FakeResult(None)
 
 
 @pytest.fixture(autouse=True)

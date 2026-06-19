@@ -116,17 +116,13 @@ async def client(app_db: None) -> AsyncIterator[AsyncClient]:
 
 async def _token(client: AsyncClient, email: str) -> str:
     await client.post("/api/auth/register", json={"email": email, "password": "hunter2hunter2"})
-    resp = await client.post(
-        "/api/auth/login", json={"email": email, "password": "hunter2hunter2"}
-    )
+    resp = await client.post("/api/auth/login", json={"email": email, "password": "hunter2hunter2"})
     return resp.json()["access_token"]
 
 
 async def _user_id(email: str) -> uuid.UUID:
     async with admin_session() as session:
-        row = (
-            await session.execute(select(User).where(User.email == email))
-        ).scalar_one()
+        row = (await session.execute(select(User).where(User.email == email))).scalar_one()
         return row.id
 
 
@@ -325,7 +321,7 @@ async def test_forged_citation_dropped(client: AsyncClient) -> None:
 
 
 async def test_tenant_isolation_query_never_sees_other_tenant(client: AsyncClient) -> None:
-    token_a = await _token(client, "a@example.com")
+    await _token(client, "a@example.com")  # register user A (queried via B below)
     token_b = await _token(client, "b@example.com")
     a = await _user_id("a@example.com")
     b = await _user_id("b@example.com")
@@ -450,9 +446,7 @@ async def test_messages_persisted_with_grounded_and_id(client: AsyncClient) -> N
     h = {"Authorization": f"Bearer {token}"}
     project_id, _doc = await _seed_project_with_chunks(owner, DOC_TEXTS_EN)
 
-    resolver.set_chat_override(
-        FakeChatProvider("Five years [manual.txt p.1 #0].", grounded=True)
-    )
+    resolver.set_chat_override(FakeChatProvider("Five years [manual.txt p.1 #0].", grounded=True))
     resp = await client.post(
         f"/api/projects/{project_id}/query",
         json={"question": DOC_TEXTS_EN[0], "stream": False},
@@ -461,11 +455,7 @@ async def test_messages_persisted_with_grounded_and_id(client: AsyncClient) -> N
     message_id = resp.json()["message_id"]
 
     async with tenant_session(owner) as session:
-        msgs = (
-            (await session.execute(select(Message).order_by(Message.created_at)))
-            .scalars()
-            .all()
-        )
+        msgs = (await session.execute(select(Message).order_by(Message.created_at))).scalars().all()
         roles = [m.role for m in msgs]
         assert MessageRole.user in roles
         assert MessageRole.assistant in roles

@@ -29,9 +29,7 @@ def _install_fake_genai(
 
     class _Response:
         text = "full answer"
-        usage_metadata = types.SimpleNamespace(
-            prompt_token_count=11, candidates_token_count=7
-        )
+        usage_metadata = types.SimpleNamespace(prompt_token_count=11, candidates_token_count=7)
 
     class _Models:
         def generate_content(self, *, model, contents, config):  # noqa: ANN001
@@ -123,9 +121,7 @@ def test_auth_error_normalized(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_transient_error_normalized(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict = {}
-    _install_fake_genai(
-        monkeypatch, captured, raise_exc=RuntimeError("429 RESOURCE_EXHAUSTED")
-    )
+    _install_fake_genai(monkeypatch, captured, raise_exc=RuntimeError("429 RESOURCE_EXHAUSTED"))
     provider = GeminiChatProvider("k")
     with pytest.raises(ProviderTransientError):
         list(

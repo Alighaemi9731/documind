@@ -36,9 +36,7 @@ REFUSAL_FA = "پاسخ این پرسش در اسناد شما یافت نشد."
 # A Persian/Arabic-block code point marks the question as Persian. Ranges:
 # Arabic (0600-06FF), Arabic Supplement (0750-077F), Arabic Extended-A
 # (08A0-08FF), Presentation Forms-A (FB50-FDFF) and -B (FE70-FEFF).
-_PERSIAN_RE = re.compile(
-    "[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]"
-)
+_PERSIAN_RE = re.compile("[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]")
 
 
 def is_persian(text: str) -> bool:

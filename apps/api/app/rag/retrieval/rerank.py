@@ -55,9 +55,7 @@ def rerank(fused_rows: Sequence[FusedRow], *, query: str) -> list[RetrievedRow]:
     query_norm = normalize(query).lower()
     query_terms = [t for t in query_norm.split(" ") if t]
 
-    scored = [
-        (_blend_score(fused, query_norm, query_terms), fused.row) for fused in fused_rows
-    ]
+    scored = [(_blend_score(fused, query_norm, query_terms), fused.row) for fused in fused_rows]
     scored.sort(key=lambda pair: (-pair[0], str(pair[1].chunk_id)))
     return [row for _score, row in scored]
 

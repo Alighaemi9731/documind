@@ -19,16 +19,20 @@ os.environ.setdefault("DOMAIN", "docs.example.com")
 # container path /data/uploads, which doesn't exist on a dev box).
 os.environ.setdefault("UPLOADS_DIR", tempfile.mkdtemp(prefix="documind-test-uploads-"))
 
+# A fresh, valid Fernet master key for BYOK encryption in tests (never hardcoded).
+from cryptography.fernet import Fernet  # noqa: E402
+
+os.environ.setdefault("MASTER_KEY_FERNET", Fernet.generate_key().decode())
+
 import pytest  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def _reset_rate_limiters():
     """Rate limiters are process-global and keyed by client IP. In tests every
-    request shares one IP, so reset them between tests to avoid cross-test 429s
-    (in production each user has a distinct IP, so there is no accumulation)."""
-    from app.services.rate_limit import login_email_limiter, login_limiter, register_limiter
+    request shares one IP, so reset ALL of them between tests to avoid cross-test
+    429s (in production each user has a distinct IP, so there is no accumulation)."""
+    from app.services.rate_limit import reset_all_limiters
 
-    for limiter in (login_limiter, login_email_limiter, register_limiter):
-        limiter._buckets.clear()
+    reset_all_limiters()
     yield

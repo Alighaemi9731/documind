@@ -24,6 +24,9 @@ dependencies = [
     "pyjwt",
     "cryptography",
     "google-genai",
+    "openai",
+    "anthropic",
+    "groq",
     "pypdf",
     "python-docx",
     "markitdown",
@@ -39,6 +42,12 @@ dev = [
     "ruff",
     "mypy",
     "black",
+]
+# Opt-in offline embeddings (bge-m3). NOT installed by default — requires >=4GB
+# RAM (ARCHITECTURE.md section 9). Enable with ENABLE_LOCAL_EMBEDDINGS.
+local-embeddings = [
+    "sentence-transformers",
+    "torch",
 ]
 
 [tool.hatch.build.targets.wheel]

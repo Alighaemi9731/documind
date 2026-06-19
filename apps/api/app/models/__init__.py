@@ -18,8 +18,11 @@ from app.models.invite import Invite
 from app.models.message import Message
 from app.models.operator_default import OperatorDefault
 from app.models.project import Project
+from app.models.provider_key import ProviderKey
+from app.models.provider_selection import ProviderSelection
 from app.models.refresh_token import RefreshToken
 from app.models.system_settings import SystemSettings
+from app.models.usage import UsageEvent, UserMonthlyUsage, UserQuota
 from app.models.user import User
 
 __all__ = [
@@ -34,7 +37,12 @@ __all__ = [
     "Message",
     "OperatorDefault",
     "Project",
+    "ProviderKey",
+    "ProviderSelection",
     "RefreshToken",
     "SystemSettings",
+    "UsageEvent",
+    "UserMonthlyUsage",
+    "UserQuota",
     "User",
 ]

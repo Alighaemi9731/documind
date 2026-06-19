@@ -6,6 +6,18 @@ All notable changes to DocuMind are documented here. Format follows
 
 ## [Unreleased]
 
+### Added — Phase 4 (BYOK + Providers)
+- **Bring-your-own-key:** per-user encrypted key store (`provider_keys`, Fernet/MultiFernet at rest, **sha256-only fingerprints**, decrypted material wrapped in a redacting `Secret`). Settings API `GET/POST/DELETE /api/settings/keys` is **write-only** — no endpoint ever returns a key (plaintext or ciphertext); keys are validated once on save via an injectable, **rate-limited** health check against hard-coded provider base URLs (no SSRF).
+- **Full provider set:** OpenAI (chat + `text-embedding-3-small`), **Anthropic** (chat-only, official SDK, `claude-opus-4-8`, adaptive thinking, **never** sends `budget_tokens`/`temperature`/`top_p`/`top_k`), Groq (chat-only), and local `bge-m3` (embedding-only, opt-in, ≥4 GB). Five new `ProviderSpec` rows; adding a provider is one spec row.
+- **Two-tier resolver:** per-capability, independent BYOK→shared precedence (a user's BYOK chat can coexist with shared Gemini embeddings); embedding selection asserts the project's dim pin (409 on mismatch) and an embedding-provider change to a new dim triggers an explicit **re-embed** job (ADR-0015).
+- **Quota (ADR-0009):** atomic pre-call reserve enforced **only** on the shared operator key (BYOK bypasses), with per-user monthly limits **and a true install-wide ceiling** (a separate atomic `install_usage` counter so the shared free-tier key can't be drained across all users); usage attributed per `key_source`. Graceful localized 429 directing the user to add their own key.
+- **Admin (backend) + settings UI:** admin endpoints (users list/disable/promote/demote with last-admin guard, registrations approve/reject, invites, usage time-series, per-user quota, keys-metadata, operator-key rotate) over a metadata session that never touches document/chunk/message content; a settings page with masked key rows and per-capability provider/model selection. Master-key rotation CLI. Migration 0004.
+- **Tests:** 215 backend tests pass against real pgvector — incl. a **secret-leak scan** (key never appears in any settings/admin response or logs), cross-tenant key/usage isolation, the install-wide ceiling across users, BYOK-bypass, key_source attribution, and the Anthropic adapter's forbidden-params assertion.
+
+### Security (Phase 4 review hardening)
+- **Admin RLS (review BLOCKER):** the Phase-4 metadata tables (keys/usage/quota/selections) now carry the `app.is_admin` bypass so admin oversight works under RLS `FORCE` — these are metadata, not content; the encrypted key is still never returned (ADR-0002).
+- BYOK validation is now rate-limited per user/IP (was only TTL-cached); the global ceiling is now genuinely install-wide (was mistakenly per-user). Rate limiters self-register so tests reset them uniformly.
+
 ### Added — Phase 3 (RAG core)
 - **Grounded, cited answers:** a project-scoped question is answered strictly from that project's chunks with server-validated citations, or refused ("not in your documents"). Hybrid retrieval = pgvector cosine + `tsvector('simple')` keyword fused by **RRF (k=60)** + a lightweight CPU rerank, all scoped `owner_id AND project_id AND embedding_dim`. The query embedding uses the same `text_norm` + `RETRIEVAL_QUERY` task type as ingest.
 - **Grounding gate (ADR-0008):** the **raw best-chunk cosine similarity** (not the RRF rank score) is the sole trust anchor — an off-topic question is refused **before any LLM call** (localized fa/en). The model's `<<<GROUNDED…>>>` sentinel is advisory and fail-closed (never upgrades grounded false→true); the server strips it from the token stream (bounded-lookahead filter) and emits the authoritative `grounded` only in the `done` event.

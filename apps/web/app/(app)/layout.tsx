@@ -42,9 +42,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between border-b border-border px-6 py-4">
-        <Link href="/dashboard" className="text-lg font-semibold tracking-tight text-foreground">
-          DocuMind
-        </Link>
+        <div className="flex items-center gap-6">
+          <Link href="/dashboard" className="text-lg font-semibold tracking-tight text-foreground">
+            DocuMind
+          </Link>
+          <nav className="flex items-center gap-4 text-sm" aria-label="Primary">
+            <Link
+              href="/dashboard"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Projects
+            </Link>
+            <Link
+              href="/settings"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Settings
+            </Link>
+          </nav>
+        </div>
         <div className="flex items-center gap-4">
           <span className="hidden text-sm text-muted-foreground sm:inline">{user.email}</span>
           <Button variant="secondary" onClick={onLogout}>

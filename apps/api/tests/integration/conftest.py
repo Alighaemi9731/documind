@@ -96,6 +96,10 @@ def _load_phase3_migration() -> ModuleType:
     return _load_migration_file("0003_phase3_rag.py", "phase3_migration")
 
 
+def _load_phase4_migration() -> ModuleType:
+    return _load_migration_file("0004_phase4_byok_quota.py", "phase4_migration")
+
+
 @pytest_asyncio.fixture(scope="session")
 async def schema(admin_engine: AsyncEngine) -> AsyncIterator[None]:
     """Build the Phase-1 schema + RLS via the migration's upgrade() and create
@@ -106,6 +110,7 @@ async def schema(admin_engine: AsyncEngine) -> AsyncIterator[None]:
     mig = _load_migration()
     mig2 = _load_phase2_migration()
     mig3 = _load_phase3_migration()
+    mig4 = _load_phase4_migration()
 
     async with admin_engine.connect() as conn:
         await conn.run_sync(_drop_all)
@@ -116,6 +121,7 @@ async def schema(admin_engine: AsyncEngine) -> AsyncIterator[None]:
                 mig.upgrade()
                 mig2.upgrade()
                 mig3.upgrade()
+                mig4.upgrade()
 
         await conn.run_sync(_run_upgrade)
 
@@ -168,9 +174,11 @@ async def app_db(schema: None, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator
     async with cleaner.connect() as conn:
         await conn.execute(
             text(
-                "TRUNCATE messages, conversations, chunks, ingest_jobs, documents, "
-                "operator_default, refresh_tokens, auth_identities, projects, "
-                "invites, system_settings, users RESTART IDENTITY CASCADE"
+                "TRUNCATE provider_keys, provider_selections, usage_events, "
+                "user_monthly_usage, install_usage, user_quota, messages, conversations, "
+                "chunks, ingest_jobs, documents, operator_default, refresh_tokens, "
+                "auth_identities, projects, invites, system_settings, users "
+                "RESTART IDENTITY CASCADE"
             )
         )
     await cleaner.dispose()

@@ -203,3 +203,87 @@ export type ChatStreamEvent =
   | { type: "citations"; citations: Citation[] }
   | { type: "done"; grounded: boolean; messageId: string; done: QueryDoneEvent }
   | { type: "error"; code: string; message: string };
+
+// ---- Settings / BYOK & providers (ARCHITECTURE.md §6/§9, ADR-0006/0007) -----
+
+/**
+ * One model a provider offers for a capability, mirroring the backend
+ * `ModelSpec` (ARCHITECTURE.md §9). `dim`/`normalized` are only meaningful for
+ * embedding models (chat models report `dim: 0`); `dim` is what drives the
+ * embedding_dim_mismatch guard on selection.
+ */
+export interface ModelInfo {
+  model: string;
+  dim?: number;
+  normalized?: boolean;
+  max_input_tokens?: number;
+}
+
+/**
+ * A provider as surfaced by GET /api/settings/providers — the declarative
+ * `ProviderSpec` (single source of truth, ARCHITECTURE.md §9) projected to the
+ * client. Carries NO secrets: only capabilities, model offerings, and whether a
+ * BYOK key is required to use it. `requires_byok=false` providers (Gemini) work
+ * out of the box on the shared operator default key.
+ */
+export interface ProviderInfo {
+  /** Provider enum value, e.g. "openai" | "anthropic" | "google" | "groq". */
+  id: Provider;
+  label: string;
+  capabilities: Capability[];
+  chat?: ModelInfo | null;
+  embedding?: ModelInfo | null;
+  /** When true the provider only works with a user-supplied BYOK key. */
+  requires_byok: boolean;
+  /** Optional UI hint for the expected key format (e.g. "sk-..."). */
+  key_format_hint?: string | null;
+}
+
+/**
+ * Non-secret metadata for a saved BYOK key (GET /api/settings/keys). The value
+ * is NEVER returned by the API — only a `fingerprint` (last-4 + sha256 prefix),
+ * a `valid` health-check result, and when it was last checked. `valid` is null
+ * when the key has not yet been validated.
+ */
+export interface ProviderKeyMeta {
+  provider: Provider;
+  fingerprint: string;
+  valid: boolean | null;
+  checked_at?: string | null;
+}
+
+/**
+ * Result of POST /api/settings/keys (write-only key save). Returns only the
+ * fingerprint + validity of the freshly saved key — never the value.
+ */
+export interface SaveKeyResult {
+  provider?: Provider;
+  fingerprint: string;
+  valid: boolean | null;
+}
+
+/**
+ * The active per-capability provider/model selection, returned alongside the
+ * provider list by GET /api/settings/providers. A capability may be absent when
+ * the user is on the shared operator default for it.
+ */
+export interface CapabilitySelection {
+  capability: Capability;
+  provider: Provider;
+  model: string;
+  /** "byok" when a user key backs this selection, "shared" for the default. */
+  key_source?: KeySource;
+}
+
+/** Full payload of GET /api/settings/providers. */
+export interface ProvidersResponse {
+  providers: ProviderInfo[];
+  selection: CapabilitySelection[];
+}
+
+/** PUT /api/settings/providers body. */
+export interface ProviderSelectionInput {
+  capability: Capability;
+  provider: Provider;
+  model: string;
+}

@@ -43,6 +43,17 @@ def decrypt(ciphertext: bytes) -> Secret:
     return Secret(plaintext)
 
 
+def rotate_ciphertext(ciphertext: bytes) -> bytes:
+    """Re-encrypt ``ciphertext`` under the CURRENT key (MultiFernet rotation).
+
+    Decrypts with any configured key (old or new) and re-encrypts with the first
+    (current) key. Used by the master-key rotation CLI to migrate dormant rows
+    before an old key is retired. The plaintext exists only transiently in
+    memory and is never returned.
+    """
+    return _build_fernet().rotate(ciphertext)
+
+
 def fingerprint(plaintext: str) -> str:
     """Non-secret fingerprint of a key, safe to store/display.
 
@@ -53,4 +64,4 @@ def fingerprint(plaintext: str) -> str:
     return f"sha256:{digest}"
 
 
-__all__ = ["KeyConfigError", "encrypt", "decrypt", "fingerprint"]
+__all__ = ["KeyConfigError", "encrypt", "decrypt", "rotate_ciphertext", "fingerprint"]

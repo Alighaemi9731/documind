@@ -121,9 +121,7 @@ def citations_from_answer(
     retrieved_ids: set[uuid.UUID],
 ) -> list[dict[str, Any]]:
     """Parse + validate in one step: model text -> validated Citation[]."""
-    return validate_citations(
-        cited_chunk_ids(answer_text, packed), packed, retrieved_ids
-    )
+    return validate_citations(cited_chunk_ids(answer_text, packed), packed, retrieved_ids)
 
 
 __all__ = [
