@@ -171,7 +171,19 @@ ensure_swap() {
   if [ "$swap_kb" -ge $(( SWAP_SIZE_MB * 1024 )) ]; then info "swap: $(( swap_kb / 1024 ))MB already present"; return; fi
   if [ -z "$SUDO" ] && [ "$(id -u)" -ne 0 ]; then warn "swap: need root to create a swapfile; skipping (you should add one on a 2GB box)"; return; fi
   log "Creating a ${SWAP_SIZE_MB}MB swapfile (RAM is ${mem_mb}MB; required headroom for ingest + HNSW build)"
-  if [ -e /swapfile ]; then $SUDO swapoff /swapfile 2>/dev/null || true; $SUDO rm -f /swapfile; fi
+  local target_bytes=$(( SWAP_SIZE_MB * 1024 * 1024 ))
+  if [ -e /swapfile ]; then
+    # Reaching here means total swap is insufficient. If a correctly-sized
+    # /swapfile already exists (just not enabled), enable it rather than destroy
+    # and recreate a file we may not own.
+    local cur; cur="$(stat -c %s /swapfile 2>/dev/null || stat -f %z /swapfile 2>/dev/null || echo 0)"
+    if [ "${cur:-0}" -ge "$target_bytes" ]; then
+      $SUDO swapon /swapfile 2>/dev/null || true
+      info "swap: reused the existing ${SWAP_SIZE_MB}MB /swapfile"
+      return 0
+    fi
+    $SUDO swapoff /swapfile 2>/dev/null || true; $SUDO rm -f /swapfile
+  fi
   if have fallocate && $SUDO fallocate -l "${SWAP_SIZE_MB}M" /swapfile 2>/dev/null; then :; else
     $SUDO dd if=/dev/zero of=/swapfile bs=1M count="$SWAP_SIZE_MB" status=none
   fi
@@ -305,10 +317,24 @@ main() {
   prompt ADMIN_EMAIL "Admin email (login + Let's Encrypt account)" "${ADMIN_EMAIL:-}"
   [ -n "$DOMAIN" ]      || die "a domain is required"
   [ -n "$ADMIN_EMAIL" ] || die "an admin email is required"
-  case "$ADMIN_EMAIL" in *@*.*) : ;; *) die "admin email looks invalid: $ADMIN_EMAIL";; esac
+  # Validate the domain BEFORE it is written into .env / the Caddy config: only a
+  # plain hostname (letters, digits, dots, hyphens) with at least one dot. This
+  # also rejects whitespace/newlines that could otherwise inject extra .env lines.
+  case "$DOMAIN" in
+    *[!a-zA-Z0-9.-]* | -* | .* | *. | *..*) die "domain looks invalid: $DOMAIN" ;;
+  esac
+  [ "${DOMAIN%.*}" = "$DOMAIN" ] && die "use a fully-qualified domain, e.g. docs.example.com (got: $DOMAIN)"
+  case "$ADMIN_EMAIL" in
+    *[[:space:]]*) die "admin email must not contain whitespace: $ADMIN_EMAIL" ;;
+    *@*.*) : ;;
+    *) die "admin email looks invalid: $ADMIN_EMAIL" ;;
+  esac
   if [ -z "${GEMINI_KEY:-}" ] && [ -z "$(env_get OPERATOR_DEFAULT_GEMINI_KEY)" ]; then
     prompt GEMINI_KEY "Free Gemini API key for the shared default (optional, Enter to skip)" ""
   fi
+  # The key is pasted verbatim after '=' in the .env heredoc; reject embedded
+  # whitespace/newlines so it can't inject an extra .env line (a real key has none).
+  case "${GEMINI_KEY:-}" in *[[:space:]]*) die "the Gemini key must not contain spaces or newlines" ;; esac
 
   log "Preflight"
   # Soft checks: warn-only, never abort the install (the real gate is the pull).
@@ -327,7 +353,7 @@ main() {
   log "Starting the stack"
   dc up -d --remove-orphans
 
-  wait_for "PostgreSQL" "_pg_ready" 120 || die "PostgreSQL did not become healthy — see: $(echo "$COMPOSE_BASE") logs postgres"
+  wait_for "PostgreSQL" "_pg_ready" 120 || die "PostgreSQL did not become healthy — see: $COMPOSE_BASE logs postgres"
 
   log "Applying database migrations"
   dc exec -T api alembic upgrade head
@@ -342,7 +368,7 @@ main() {
   log "Ensuring the bootstrap admin account"
   dc exec -T api python -m app.cli bootstrap-admin --email "$ADMIN_EMAIL"
 
-  wait_for "the API to report ready" "api_ready" "$WAIT_TIMEOUT" || warn "API readiness timed out — check: $(echo "$COMPOSE_BASE") logs api"
+  wait_for "the API to report ready" "api_ready" "$WAIT_TIMEOUT" || warn "API readiness timed out — check: $COMPOSE_BASE logs api"
 
   printf "\n"
   surface_https "$DOMAIN"

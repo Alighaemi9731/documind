@@ -77,16 +77,18 @@ make backup            # = deploy/backup/backup.sh
 # off-box copy (do this!):  rsync -a backups/ you@store:/documind-backups/
 ```
 
-**Restore** onto a fresh install (stack must be up so Postgres is reachable; the
-API is stopped during the DB load):
+**Restore** onto a fresh install (Postgres must be up; `api` and `caddy` are
+stopped during the restore and restarted after):
 
 ```bash
 deploy/backup/restore.sh backups/db-<stamp>.dump.gz backups/volumes-<stamp>.tar.gz
 ```
 
 Notes:
-- `restore.sh` is destructive (`pg_restore --clean --if-exists`) — confirm the
-  target before running.
+- `restore.sh` is destructive (`pg_restore --clean --if-exists`, and it **clears**
+  the uploads + `caddy_data` volumes before extracting). It validates both input
+  files, then requires you to type **`yes`**; set `RESTORE_YES=1` to skip the
+  prompt in automation.
 - Volume names are project-scoped (`documind_uploads`, `documind_caddy_data`);
   the scripts already use those names.
 - Schedule `make backup` from cron (e.g. nightly) and verify a restore on a
