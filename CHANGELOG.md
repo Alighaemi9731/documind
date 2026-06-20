@@ -6,6 +6,9 @@ All notable changes to DocuMind are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- **Bootstrap admin could not sign in.** `bootstrap-admin` creates the configured admin account without a password (expecting it to be claimed by self-registration), but `register` rejected the existing email outright — locking the operator out. The configured `ADMIN_EMAIL` can now **claim** its passwordless bootstrap account on first registration (sets the password, stays an active admin); the claim is scoped to that exact email (no account-takeover surface) and is one-shot (a later duplicate registration still 409s). Covered by two new tests.
+
 ### Added — Phase 6 (Install & SSL)
 - **One-line installer (`install.sh`):** `curl -fsSL … | bash` → prompts for domain + admin email (+ optional Gemini key), or reads them from the environment for unattended installs. It is **idempotent**: secrets (`POSTGRES_PASSWORD`, `JWT_SECRET`, `MASTER_KEY_FERNET`) are CSPRNG-generated once and **preserved on re-run**, so a re-run upgrades in place without invalidating sessions or ACME certificates. Preflight covers Docker + the compose v2 plugin, an anonymous **GHCR manifest check** for both images, port-80 reachability, a soft DNS-vs-public-IP check, and a **mandatory 2 GB swapfile** on ≤2 GB hosts. It then `compose pull` → `up -d` → waits for Postgres → `alembic upgrade head` → seeds the operator key → ensures the bootstrap admin → waits for `/api/health/ready`, and finally probes public HTTPS — **surfacing the Caddy/ACME logs** when a certificate hasn't issued rather than only reporting success.
 - **Automatic HTTPS:** Caddy obtains/renews Let's Encrypt certificates (HTTP-01); the installer wires `ACME_EMAIL` and supports a **staging-CA** mode (`DOCUMIND_ACME_STAGING=1`) so smoke tests on throwaway hosts don't burn the production rate limit. `caddy_data` (account + certs) is a named volume that survives restarts and is included in backups.

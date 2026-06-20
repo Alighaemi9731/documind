@@ -144,6 +144,28 @@ async def register(
     norm_email = normalize_email(email)
     existing = await get_user_by_email(session, norm_email)
     if existing is not None:
+        # `bootstrap-admin` creates the configured admin account WITHOUT a
+        # password (no password identity). Let that exact email CLAIM the account
+        # on first self-registration: set the password and keep it an active
+        # admin. This is the only passwordless account in v1, and the claim is
+        # scoped to the configured admin email — every other existing email is a
+        # genuine duplicate. Mode (open/approval/invite) is bypassed for the
+        # operator's own admin, mirroring the new-account reconciliation below.
+        is_admin_email = bool(admin_email and normalize_email(admin_email) == norm_email)
+        has_password = await _password_identity(session, existing.id) is not None
+        if is_admin_email and not has_password:
+            existing.role = UserRole.admin
+            existing.status = UserStatus.active
+            session.add(
+                AuthIdentity(
+                    user_id=existing.id,
+                    provider=PASSWORD_PROVIDER,
+                    provider_subject=norm_email,
+                    password_hash=await _hash_password_bounded(password),
+                )
+            )
+            await session.flush()
+            return existing
         raise AuthError("email_taken", "Email already registered.")
 
     invite: Invite | None = None
