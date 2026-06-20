@@ -120,3 +120,166 @@ body {
 .animate-fade-in {
   animation: fade-in 0.18s ease-out both;
 }
+
+/* ===========================================================================
+ * Marketing / auth ambience — scoped, token-driven, decorative.
+ * All effects are built from the --accent token so they track light/dark and
+ * the operator branding. Kept minimal; nothing here ships to the app shell.
+ * =========================================================================== */
+
+/* Soft, layered aurora blobs that bloom from the accent. Sits behind content
+ * (place inside an aria-hidden, pointer-events-none container). */
+.aurora {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.aurora::before,
+.aurora::after {
+  content: "";
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(72px);
+  opacity: 0.5;
+}
+.aurora::before {
+  inset-block-start: -14rem;
+  inset-inline-end: -10rem;
+  inline-size: 36rem;
+  block-size: 36rem;
+  background: radial-gradient(circle at center, hsl(var(--accent) / 0.5), transparent 68%);
+}
+.aurora::after {
+  inset-block-start: 6rem;
+  inset-inline-start: -12rem;
+  inline-size: 30rem;
+  block-size: 30rem;
+  background: radial-gradient(circle at center, hsl(var(--accent) / 0.32), transparent 70%);
+}
+.dark .aurora::before {
+  opacity: 0.42;
+}
+.dark .aurora::after {
+  opacity: 0.34;
+}
+
+/* Faint engineering grid — fades out toward the edges via a radial mask. */
+.hero-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, hsl(var(--foreground) / 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--foreground) / 0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 35%, black 35%, transparent 78%);
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 35%, black 35%, transparent 78%);
+}
+.dark .hero-grid {
+  background-image:
+    linear-gradient(to right, hsl(var(--foreground) / 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--foreground) / 0.07) 1px, transparent 1px);
+}
+
+/* Subtle dot field — alternative texture for the auth panel. */
+.hero-dots {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(hsl(var(--foreground) / 0.1) 1px, transparent 1.5px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, black 30%, transparent 82%);
+  mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, black 30%, transparent 82%);
+}
+
+/* Hairline glass surface (used sparingly — the nav + auth aside). */
+.glass-surface {
+  background: hsl(var(--glass) / 0.66);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  backdrop-filter: saturate(180%) blur(14px);
+}
+
+/* ---- HeroArt motion (pure CSS; disabled under reduced-motion above) ---- */
+@keyframes ha-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+@keyframes ha-float-slow {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+@keyframes ha-beam-pulse {
+  from {
+    stroke-dashoffset: 266;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes ha-spark {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+}
+@keyframes ha-twinkle {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+[data-heroart] .ha-float {
+  animation: ha-float 7s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+[data-heroart] .ha-float-slow {
+  animation: ha-float-slow 9s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+[data-heroart] .ha-beam-pulse {
+  animation: ha-beam-pulse 3.4s linear infinite;
+}
+[data-heroart] .ha-spark {
+  animation: ha-spark 3s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+[data-heroart] .ha-twinkle {
+  animation: ha-twinkle 4.5s ease-in-out infinite;
+}
+
+/* The HeroArt reads start→end (source → answer). Mirror the whole figure under
+ * RTL so the narrative direction follows the reading direction. */
+[dir="rtl"] [data-heroart] {
+  transform: scaleX(-1);
+}
+
+/* "How it works" connector arrow: nudge it onto the gap at the inline-end edge,
+ * and flip the glyph horizontally under RTL so it still points end-ward. */
+.step-arrow {
+  transform: translateY(-50%) translateX(50%);
+}
+[dir="rtl"] .step-arrow {
+  transform: translateY(-50%) translateX(-50%) scaleX(-1);
+}

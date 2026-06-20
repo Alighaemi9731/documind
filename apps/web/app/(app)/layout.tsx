@@ -35,7 +35,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   async function onLogout() {
     await logout();
-    router.replace("/login");
+    router.replace("/");
   }
 
   if (isLoading || !user) {

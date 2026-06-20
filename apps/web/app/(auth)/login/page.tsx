@@ -61,9 +61,14 @@ function LoginForm() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight text-card-foreground">Sign in</h1>
-        <p className="text-sm text-muted-foreground">Welcome back to DocuMind.</p>
+      <header className="flex flex-col items-center gap-3 text-center">
+        <AuthMark />
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-card-foreground">
+            Welcome back
+          </h1>
+          <p className="text-sm text-muted-foreground">Sign in to continue to your documents.</p>
+        </div>
       </header>
 
       <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
@@ -100,5 +105,29 @@ function LoginForm() {
         </Link>
       </p>
     </div>
+  );
+}
+
+/** Small accent-tinted brand mark shown above the auth form headings. */
+function AuthMark() {
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/10 text-accent ring-1 ring-inset ring-accent/25"
+    >
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <path
+          d="M12 2.5l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9L12 2.5z"
+          fill="currentColor"
+        />
+        <path
+          d="M5 19.5h14"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          opacity="0.5"
+        />
+      </svg>
+    </span>
   );
 }
