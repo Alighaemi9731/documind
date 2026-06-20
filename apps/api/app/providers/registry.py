@@ -192,35 +192,39 @@ def load_chat_adapter(spec: ProviderSpec, api_key: str) -> LLMProvider:
 def build_validation_probe(spec: ProviderSpec, api_key: str) -> Callable[[], None]:
     """Return a zero-arg cheap health check for ``spec`` (one provider call).
 
-    Prefers the chat capability (a 1-token request) and falls back to embedding.
+    Prefers the EMBEDDING capability (a tiny embed) and falls back to chat.
+    Embedding is the RAG-critical capability and, on free tiers, has far higher
+    quota than chat — so probing chat would FALSELY mark a perfectly good
+    embedding key invalid when the provider's free chat quota is exhausted
+    (e.g. Gemini returns 429 on generate_content while embeddings still work).
     Local providers (no base URL / no key) validate trivially as OK.
     """
     if not spec.base_url:
         # Local provider: nothing to reach; treat as valid.
         return lambda: None
 
+    if spec.embedding is not None and spec.embedding_adapter:
+        emb = load_embedding_adapter(spec, api_key)
+        embed_model = spec.embedding.model
+
+        def _probe_embed() -> None:
+            emb.embed_query("ping", model=embed_model)
+
+        return _probe_embed
+
     if spec.chat is not None and spec.chat_adapter:
         adapter = load_chat_adapter(spec, api_key)
-        model = spec.chat.model
+        chat_model = spec.chat.model
 
         def _probe_chat() -> None:
             adapter.chat(
                 [{"role": "user", "content": "ping"}],
-                model=model,
+                model=chat_model,
                 system="",
                 max_tokens=1,
             )
 
         return _probe_chat
-
-    if spec.embedding is not None and spec.embedding_adapter:
-        emb = load_embedding_adapter(spec, api_key)
-        model = spec.embedding.model
-
-        def _probe_embed() -> None:
-            emb.embed_query("ping", model=model)
-
-        return _probe_embed
 
     raise CapabilityUnsupported(f"{spec.id} has no probeable capability.")
 

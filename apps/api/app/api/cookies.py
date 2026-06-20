@@ -17,7 +17,15 @@ from app.core.config import settings
 REFRESH_COOKIE_NAME = "documind_refresh"
 CSRF_COOKIE_NAME = "documind_csrf"
 CSRF_HEADER_NAME = "X-CSRF-Token"
+# The httpOnly refresh cookie is path-scoped so the secret is only sent to the
+# refresh/logout endpoints. The CSRF cookie is the double-submit token (NOT a
+# secret) and MUST be readable by the SPA's JS on every app route to be echoed
+# back as the X-CSRF-Token header — so it is scoped to "/", not COOKIE_PATH.
+# (A /api/auth-scoped CSRF cookie is invisible to document.cookie on /settings,
+# which silently breaks the silent-refresh with a 403 once the access token
+# expires.)
 COOKIE_PATH = "/api/auth"
+CSRF_COOKIE_PATH = "/"
 
 
 def _max_age_seconds() -> int:
@@ -44,13 +52,17 @@ def set_auth_cookies(response: Response, *, refresh_token: str, csrf_token: str)
         httponly=False,
         secure=secure,
         samesite="lax",
-        path=COOKIE_PATH,
+        path=CSRF_COOKIE_PATH,
     )
+    # Evict a LEGACY CSRF cookie that an older build scoped to COOKIE_PATH: a
+    # stale, app-page-unreadable duplicate would otherwise linger after upgrade.
+    response.delete_cookie(CSRF_COOKIE_NAME, path=COOKIE_PATH)
 
 
 def clear_auth_cookies(response: Response) -> None:
-    """Expire both cookies (logout)."""
+    """Expire both cookies (logout), including any legacy-scoped CSRF cookie."""
     response.delete_cookie(REFRESH_COOKIE_NAME, path=COOKIE_PATH)
+    response.delete_cookie(CSRF_COOKIE_NAME, path=CSRF_COOKIE_PATH)
     response.delete_cookie(CSRF_COOKIE_NAME, path=COOKIE_PATH)
 
 

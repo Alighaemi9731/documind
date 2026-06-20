@@ -130,7 +130,6 @@ async def process_job(
     session: AsyncSession,
     job: IngestJob,
     *,
-    embedder: EmbeddingProvider,
     read_bytes: BytesReader,
     kind: str | None = None,
 ) -> DocumentStatus:
@@ -179,7 +178,9 @@ async def process_job(
         )
         chunk_texts = [c.normalized_content for c in chunks]
         try:
-            vectors = _embed_all(embedder, chunk_texts, resolved.model)
+            # Embed with the PER-JOB resolved adapter (BYOK → shared operator),
+            # so a BYOK-only install with no operator key still embeds correctly.
+            vectors = _embed_all(resolved.adapter, chunk_texts, resolved.model)
         except ProviderTransientError as exc:
             # Rate limit / quota / 5xx: do NOT fail. The claim lease provides the
             # backoff; the job is re-claimed and re-embedded after it expires.
@@ -324,7 +325,6 @@ async def reap_exhausted_jobs(maker: async_sessionmaker[AsyncSession]) -> None:
 
 async def process_one(
     session_factory: async_sessionmaker[AsyncSession] | None,
-    embedder: EmbeddingProvider,
     *,
     read_bytes: BytesReader,
 ) -> DocumentStatus | None:
@@ -351,24 +351,26 @@ async def process_one(
         fetched = await session.execute(select(IngestJob).where(IngestJob.id == job_id))
         job = fetched.scalar_one()
         try:
-            return await process_job(session, job, embedder=embedder, read_bytes=read_bytes)
+            return await process_job(session, job, read_bytes=read_bytes)
         except TransientEmbedError:
             return DocumentStatus.embedding
 
 
 async def run_forever(
-    embedder: EmbeddingProvider,
     *,
     read_bytes: BytesReader,
     poll_interval: float = 2.0,
 ) -> None:
-    """Bounded polling loop (production). Concurrency = ``INGEST_CONCURRENCY``."""
+    """Bounded polling loop (production). Concurrency = ``INGEST_CONCURRENCY``.
+
+    The embedding adapter is resolved PER JOB (per owner) inside ``process_job``,
+    so the loop needs no operator key to start."""
     semaphore = asyncio.Semaphore(max(1, settings.ingest_concurrency))
 
     async def _drain() -> None:
         async with semaphore:
             try:
-                await process_one(None, embedder, read_bytes=read_bytes)
+                await process_one(None, read_bytes=read_bytes)
             except Exception:  # noqa: BLE001 - never let the loop die
                 logger.exception("ingest worker iteration failed")
 

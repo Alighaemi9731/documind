@@ -27,7 +27,12 @@ TASK_QUERY = "RETRIEVAL_QUERY"
 DEFAULT_MODEL = "gemini-embedding-001"
 DEFAULT_DIM = 768
 # Operator-default Gemini chat model (ADR-0006; Gemini is the shared default).
-DEFAULT_CHAT_MODEL = "gemini-2.0-flash"
+# Use the rolling "flash-latest" alias rather than a pinned version: Google has
+# set the FREE-tier generate_content quota for pinned models like gemini-2.0-flash
+# to 0 (chat fails with 429 limit:0 unless billing is enabled), whereas
+# gemini-flash-latest currently resolves to a model that IS available on the free
+# tier — so the shared free-Gemini default can actually answer out of the box.
+DEFAULT_CHAT_MODEL = "gemini-flash-latest"
 
 # Substrings that classify a raw SDK exception (status code or message).
 _TRANSIENT_MARKERS = (
@@ -194,7 +199,14 @@ class GeminiChatProvider:
             raise
         except Exception as exc:  # noqa: BLE001 - normalize SDK errors
             raise _translate_error(exc) from exc
-        text = getattr(response, "text", "") or ""
+        # `response.text` is a PROPERTY that RAISES when the candidate has no text
+        # part (blocked, or finish_reason=MAX_TOKENS with no content — e.g. the
+        # 1-token validation probe). A successful API call is still a valid key /
+        # a legitimate empty answer, so treat "no text" as empty, never an error.
+        try:
+            text = response.text or ""
+        except Exception:  # noqa: BLE001 - empty/blocked completion → no text part
+            text = ""
         usage = getattr(response, "usage_metadata", None)
         return ChatResult(
             text=text,
@@ -218,7 +230,10 @@ class GeminiChatProvider:
                 config=self._config(system=system, max_tokens=max_tokens),
             )
             for event in stream:
-                text = getattr(event, "text", None)
+                try:
+                    text = event.text
+                except Exception:  # noqa: BLE001 - skip blocked/empty stream chunks
+                    text = None
                 if text:
                     yield ChatDelta(text=text)
         except ProviderError:

@@ -101,9 +101,7 @@ async def test_process_one_stores_embedded_chunks(app_db: None) -> None:
     doc_id = await _make_document(owner, project_id)
 
     resolver.set_embedding_override(FakeEmbeddingProvider(dim=DIM))
-    status = await worker.process_one(
-        None, FakeEmbeddingProvider(dim=DIM), read_bytes=_reader(TEXT_BODY.encode())
-    )
+    status = await worker.process_one(None, read_bytes=_reader(TEXT_BODY.encode()))
     assert status is DocumentStatus.ready
 
     async with worker_tenant_session(owner) as session:
@@ -145,9 +143,7 @@ async def test_dim_mismatch_rejected(app_db: None) -> None:
     await _make_document(owner, project_id)
 
     resolver.set_embedding_override(WrongDimEmbeddingProvider(dim=DIM))
-    status = await worker.process_one(
-        None, WrongDimEmbeddingProvider(dim=DIM), read_bytes=_reader(TEXT_BODY.encode())
-    )
+    status = await worker.process_one(None, read_bytes=_reader(TEXT_BODY.encode()))
     # The store rejects the wrong-dim vector => the document fails (EMBED_ERROR).
     assert status is DocumentStatus.failed
 
@@ -166,7 +162,7 @@ async def test_poison_job_is_marked_failed(app_db: None) -> None:
 
     bad = RaisingEmbeddingProvider(dim=DIM)
     resolver.set_embedding_override(bad)
-    status = await worker.process_one(None, bad, read_bytes=_reader(TEXT_BODY.encode()))
+    status = await worker.process_one(None, read_bytes=_reader(TEXT_BODY.encode()))
     # An unexpected embedder error fails the document instead of hanging it.
     assert status is DocumentStatus.failed
 
@@ -190,7 +186,7 @@ async def test_transient_embed_does_not_fail(app_db: None) -> None:
 
     transient = TransientEmbeddingProvider(dim=DIM)
     resolver.set_embedding_override(transient)
-    status = await worker.process_one(None, transient, read_bytes=_reader(TEXT_BODY.encode()))
+    status = await worker.process_one(None, read_bytes=_reader(TEXT_BODY.encode()))
     # A rate limit is transient: the doc is NOT failed; it is retried later.
     assert status is DocumentStatus.embedding
 
@@ -260,9 +256,7 @@ async def test_tenant_isolation_documents_and_chunks(app_db: None) -> None:
     await _make_document(a, project_a)
 
     resolver.set_embedding_override(FakeEmbeddingProvider(dim=DIM))
-    await worker.process_one(
-        None, FakeEmbeddingProvider(dim=DIM), read_bytes=_reader(TEXT_BODY.encode())
-    )
+    await worker.process_one(None, read_bytes=_reader(TEXT_BODY.encode()))
 
     # B, scoped to itself, sees NONE of A's documents or chunks (RLS, no bypass).
     async with worker_tenant_session(b) as session:
@@ -299,7 +293,7 @@ async def test_worker_sets_guc_from_job_owner(app_db: None) -> None:
     worker.store.store_chunks = _spy  # type: ignore[assignment]
     try:
         resolver.set_embedding_override(fake)
-        await worker.process_one(None, fake, read_bytes=_reader(TEXT_BODY.encode()))
+        await worker.process_one(None, read_bytes=_reader(TEXT_BODY.encode()))
     finally:
         store.store_chunks = original  # type: ignore[assignment]
         worker.store.store_chunks = original  # type: ignore[assignment]
@@ -308,6 +302,5 @@ async def test_worker_sets_guc_from_job_owner(app_db: None) -> None:
 
 
 async def test_no_runnable_job_returns_none(app_db: None) -> None:
-    fake = FakeEmbeddingProvider(dim=DIM)
-    result = await worker.process_one(None, fake, read_bytes=_reader(b"x"))
+    result = await worker.process_one(None, read_bytes=_reader(b"x"))
     assert result is None

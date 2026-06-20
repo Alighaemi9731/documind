@@ -59,18 +59,16 @@ async def lifespan(app: FastAPI):
 
 
 async def _run_ingest_worker() -> None:
-    """Resolve the shared embedder once and run the bounded ingest loop."""
-    from app.core.db import admin_session
+    """Run the bounded ingest loop.
+
+    The embedder is resolved PER JOB (per owner: BYOK → shared operator) inside
+    the worker, so the loop starts even when no operator default key is seeded
+    (e.g. a BYOK-only install) instead of crashing at startup.
+    """
     from app.ingestion.storage import read_document_bytes
     from app.ingestion.worker import run_forever
-    from app.models.enums import Provider
-    from app.providers import registry
-    from app.providers.keystore.operator_default import load_operator_key
 
-    async with admin_session() as session:
-        secret = await load_operator_key(session, provider=Provider.google.value)
-    embedder = registry.load_embedding_adapter(registry.GEMINI_SPEC, secret.reveal())
-    await run_forever(embedder, read_bytes=read_document_bytes)
+    await run_forever(read_bytes=read_document_bytes)
 
 
 app = FastAPI(title="DocuMind API", version=__version__, lifespan=lifespan)
