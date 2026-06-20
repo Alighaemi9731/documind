@@ -20,7 +20,7 @@ docker compose --env-file .env -f deploy/docker-compose.yml <cmd>
 ## 1. Install / first run
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/documind-app/documind/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Alighaemi9731/documind/main/install.sh | bash
 ```
 
 You are prompted for a **domain** (apex A/AAAA record pointing at the box), an

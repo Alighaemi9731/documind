@@ -2,7 +2,7 @@
 #
 # DocuMind one-line installer.
 #
-#   curl -fsSL https://raw.githubusercontent.com/documind-app/documind/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Alighaemi9731/documind/main/install.sh | bash
 #
 # It is idempotent: re-running it PRESERVES generated secrets (so existing
 # sessions and ACME certificates keep working) and only fills in what is
@@ -28,10 +28,10 @@ set -euo pipefail
 # --------------------------------------------------------------------------- #
 # Config (all overridable via env)
 # --------------------------------------------------------------------------- #
-REPO_URL="${DOCUMIND_REPO_URL:-https://github.com/documind-app/documind.git}"
+REPO_URL="${DOCUMIND_REPO_URL:-https://github.com/Alighaemi9731/documind.git}"
 REPO_REF="${DOCUMIND_REF:-main}"
 INSTALL_DIR="${DOCUMIND_DIR:-/opt/documind}"
-IMAGE_OWNER="${IMAGE_OWNER:-documind-app}"
+IMAGE_OWNER="${IMAGE_OWNER:-alighaemi9731}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 SWAP_SIZE_MB="${DOCUMIND_SWAP_MB:-2048}"
 WAIT_TIMEOUT="${DOCUMIND_WAIT_TIMEOUT:-240}"

@@ -9,7 +9,7 @@ services:
     build:
       context: ../apps/api
       dockerfile: Dockerfile.api
-    image: ghcr.io/${IMAGE_OWNER:-documind-app}/documind-api:${IMAGE_TAG:-latest}
+    image: ghcr.io/${IMAGE_OWNER:-alighaemi9731}/documind-api:${IMAGE_TAG:-latest}
     environment:
       ENVIRONMENT: development
       LOG_LEVEL: debug
@@ -20,7 +20,7 @@ services:
     build:
       context: ../apps/web
       dockerfile: Dockerfile.web
-    image: ghcr.io/${IMAGE_OWNER:-documind-app}/documind-web:${IMAGE_TAG:-latest}
+    image: ghcr.io/${IMAGE_OWNER:-alighaemi9731}/documind-web:${IMAGE_TAG:-latest}
     ports:
       - "3000:3000"
 

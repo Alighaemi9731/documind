@@ -18,14 +18,14 @@ See [ARCHITECTURE.md](ARCHITECTURE.md), the [operating runbook](docs/operating.m
 
 ## Install (one line)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/documind-app/documind/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Alighaemi9731/documind/main/install.sh | bash
 ```
 You'll be asked for a **domain** and an **admin email** (and optionally a free [Gemini key](https://aistudio.google.com/apikey)). On a 2 GB box that's it: the installer preflights the host, generates and **preserves** secrets, pulls the public images, obtains HTTPS certificates automatically (Caddy + Let's Encrypt), runs migrations, and brings everything up — then prints your URL. It's **idempotent**: re-run it any time to upgrade; your secrets and data are preserved.
 
 Unattended? Pass the answers in the environment:
 ```bash
 DOMAIN=docs.example.com ADMIN_EMAIL=you@example.com GEMINI_KEY=AIza... \
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/documind-app/documind/main/install.sh)"
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/Alighaemi9731/documind/main/install.sh)"
 ```
 See the [operating runbook](docs/operating.md) for backup/restore, secret rotation, the ACME/HTTPS troubleshooting table, and upgrades.
 
