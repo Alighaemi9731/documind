@@ -283,3 +283,214 @@ body {
 [dir="rtl"] .step-arrow {
   transform: translateY(-50%) translateX(-50%) scaleX(-1);
 }
+
+/* ===========================================================================
+ * Landing v2 — immersive, scroll-driven. Full-page animated backdrop + reveals.
+ * Everything is token-driven (light/dark/branding) and disabled under
+ * prefers-reduced-motion by the global rule above.
+ * =========================================================================== */
+
+/* Drift the aurora blobs so the whole page feels alive (not a static panel). */
+.aurora::before {
+  animation: drift-a 22s ease-in-out infinite;
+}
+.aurora::after {
+  animation: drift-b 26s ease-in-out infinite;
+}
+@keyframes drift-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-3rem, 2rem, 0) scale(1.12);
+  }
+}
+@keyframes drift-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(2.5rem, -1.5rem, 0) scale(1.1);
+  }
+}
+
+/* Full-viewport fixed backdrop for the landing: layered color orbs + a fading
+ * grid + a top glow + vignette. Place as a fixed aria-hidden layer. */
+.bg-page {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 40rem at 50% -10%, hsl(var(--accent) / 0.16), transparent 60%),
+    radial-gradient(40rem 40rem at 100% 0%, hsl(var(--accent) / 0.1), transparent 55%);
+}
+.bg-page::before {
+  /* fine grid, masked to fade outward */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, hsl(var(--foreground) / 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--foreground) / 0.05) 1px, transparent 1px);
+  background-size: 60px 60px;
+  -webkit-mask-image: radial-gradient(ellipse 95% 70% at 50% 0%, black 30%, transparent 75%);
+  mask-image: radial-gradient(ellipse 95% 70% at 50% 0%, black 30%, transparent 75%);
+}
+.dark .bg-page::before {
+  background-image:
+    linear-gradient(to right, hsl(var(--foreground) / 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--foreground) / 0.08) 1px, transparent 1px);
+}
+.orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  opacity: 0.5;
+}
+.orb-1 {
+  inset-block-start: -10rem;
+  inset-inline-start: -8rem;
+  inline-size: 34rem;
+  block-size: 34rem;
+  background: radial-gradient(circle, hsl(var(--accent) / 0.55), transparent 68%);
+  animation: drift-a 24s ease-in-out infinite;
+}
+.orb-2 {
+  inset-block-start: 30%;
+  inset-inline-end: -10rem;
+  inline-size: 30rem;
+  block-size: 30rem;
+  background: radial-gradient(circle, hsl(280 80% 60% / 0.4), transparent 70%);
+  animation: drift-b 30s ease-in-out infinite;
+}
+.orb-3 {
+  inset-block-end: -8rem;
+  inset-inline-start: 30%;
+  inline-size: 28rem;
+  block-size: 28rem;
+  background: radial-gradient(circle, hsl(190 85% 55% / 0.32), transparent 70%);
+  animation: drift-a 34s ease-in-out infinite reverse;
+}
+
+/* Scroll reveal (gated on `.js` so no-JS keeps content visible; the `.js` class
+ * is added pre-paint by the theme script, so there is no flash). */
+.js [data-reveal] {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--rd, 0ms);
+  will-change: opacity, transform;
+}
+.js [data-reveal].is-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Accent gradient text for hero emphasis. */
+.gradient-text {
+  background-image: linear-gradient(
+    100deg,
+    hsl(var(--accent)),
+    hsl(var(--accent) / 0.65) 40%,
+    hsl(280 80% 62%)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Gentle continuous bob for floating surfaces. */
+.floaty {
+  animation: floaty 9s ease-in-out infinite;
+}
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* ---- Live chat demo (the hero centerpiece) — CSS, plays once on load ---- */
+.demo-typing span {
+  animation: demo-dot 1.2s ease-in-out infinite;
+}
+.demo-typing span:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.demo-typing span:nth-child(3) {
+  animation-delay: 0.36s;
+}
+@keyframes demo-dot {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+/* answer lines + chips reveal in sequence on mount */
+.demo-line,
+.demo-chip,
+.demo-src {
+  opacity: 0;
+  animation: demo-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.demo-line {
+  transform: translateY(6px);
+}
+.demo-line:nth-child(1) {
+  animation-delay: 0.9s;
+}
+.demo-line:nth-child(2) {
+  animation-delay: 1.25s;
+}
+.demo-line:nth-child(3) {
+  animation-delay: 1.6s;
+}
+.demo-chip:nth-child(1) {
+  animation-delay: 2s;
+}
+.demo-chip:nth-child(2) {
+  animation-delay: 2.15s;
+}
+.demo-src {
+  animation-delay: 2.4s;
+}
+@keyframes demo-in {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.demo-caret {
+  display: inline-block;
+  inline-size: 2px;
+  block-size: 1.05em;
+  margin-inline-start: 2px;
+  vertical-align: text-bottom;
+  background: hsl(var(--accent));
+  animation: demo-caret 1s step-end infinite;
+}
+@keyframes demo-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Providers marquee (subtle, optional). */
+.provider-pill {
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card) / 0.6);
+}

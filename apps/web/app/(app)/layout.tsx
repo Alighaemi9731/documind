@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Logo } from "@/components/ui/Logo";
@@ -27,13 +27,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isAdmin = user?.role === "admin";
   const pendingCount = usePendingCount(!!isAdmin);
 
+  // Guard the unauthenticated→/login redirect during an explicit sign-out: when
+  // logout() sets user=null, this effect would otherwise win the race and send
+  // the user to /login instead of the landing page.
+  const signingOut = useRef(false);
+
   useEffect(() => {
-    if (!isLoading && !user) {
+    if (!isLoading && !user && !signingOut.current) {
       router.replace("/login");
     }
   }, [isLoading, user, router]);
 
   async function onLogout() {
+    signingOut.current = true;
     await logout();
     router.replace("/");
   }

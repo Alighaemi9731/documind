@@ -38,7 +38,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
  * paint. Kept dependency-free and tiny; emitted with the per-request CSP nonce
  * so it runs under the strict no-unsafe-inline policy.
  */
-export const THEME_SCRIPT = `(function(){try{var m=document.cookie.match(/(?:^|; )documind_theme=([^;]*)/);var p=m?decodeURIComponent(m[1]):"system";var d=p==="dark"||(p!=="light"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);var e=document.documentElement;if(d){e.classList.add("dark");}else{e.classList.remove("dark");}e.style.colorScheme=d?"dark":"light";}catch(_){}})();`;
+export const THEME_SCRIPT = `(function(){try{var e=document.documentElement;e.classList.add("js");var m=document.cookie.match(/(?:^|; )documind_theme=([^;]*)/);var p=m?decodeURIComponent(m[1]):"system";var d=p==="dark"||(p!=="light"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d){e.classList.add("dark");}else{e.classList.remove("dark");}e.style.colorScheme=d?"dark":"light";}catch(_){}})();`;
 
 export function ThemeScript({ nonce }: { nonce?: string }) {
   // Not dangerouslySetInnerHTML of user content — this is a static, audited
