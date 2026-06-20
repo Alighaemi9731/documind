@@ -34,6 +34,11 @@ COPY app ./app
 COPY alembic.ini ./alembic.ini
 COPY alembic ./alembic
 
+# Pre-create the uploads dir owned by the non-root runtime user. A fresh named
+# volume mounted at /data/uploads inherits this ownership, so the app can write
+# uploads without a manual chown (the volume is created root-owned otherwise).
+RUN mkdir -p /data/uploads && chown -R app:app /data/uploads
+
 USER app
 
 EXPOSE 8000

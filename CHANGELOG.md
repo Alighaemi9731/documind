@@ -7,6 +7,7 @@ All notable changes to DocuMind are documented here. Format follows
 ## [Unreleased]
 
 ### Fixed
+- **Uploads failed with a non-root container (permission denied).** The API image runs as the non-root `app` user, but the `uploads` named volume is created root-owned, so writing an upload to `/data/uploads` 500'd. `Dockerfile.api` now pre-creates `/data/uploads` owned by `app`, so a fresh volume inherits writable ownership. (Existing installs: `docker compose exec -u root api chown -R app:app /data/uploads` once.)
 - **Bootstrap admin could not sign in.** `bootstrap-admin` creates the configured admin account without a password (expecting it to be claimed by self-registration), but `register` rejected the existing email outright — locking the operator out. The configured `ADMIN_EMAIL` can now **claim** its passwordless bootstrap account on first registration (sets the password, stays an active admin); the claim is scoped to that exact email (no account-takeover surface) and is one-shot (a later duplicate registration still 409s). Covered by two new tests.
 
 ### Added — Phase 6 (Install & SSL)
